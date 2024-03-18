@@ -1,4 +1,3 @@
-import gymnasium as gym
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import deque
@@ -7,6 +6,262 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import pygame
+
+def load_image(name):
+    """Loads an image from the 'tiles/' directory."""
+    return pygame.image.load(f'tiles/{name}.png')
+
+
+class FrozenLakeGame:
+    def __init__(self, map_name="4x4", is_slippery=False, render_mode="human"):
+        global win, win_size;
+        self.map_name = map_name
+        self.is_slippery = is_slippery
+        self.map_layout = self.load_map(map_name)
+        self.state = 0
+        self.done = False
+        # Define action mapping: 0=Left, 1=Down, 2=Right, 3=Up
+        # self.action_space = np.arange(4)
+        # self.observation_space = np.arange(len(self.map_layout) * len(self.map_layout[0]))
+        self.render_mode = render_mode
+
+        self.observation_space = len(self.map_layout) * len(self.map_layout[0])
+        self.action_space = 4  # Assuming Left, Down, Right, Up
+
+        pygame.init()
+        win_size = (400, 400)
+        win = pygame.display.set_mode(win_size)
+        pygame.display.set_caption("FrozenLake Play")
+
+    def action_space_sample(self):
+        # Returns a random action from 0, 1, 2, 3
+        return random.randint(0, 3)
+
+    def generate_solvable_map(self, rows, cols):
+        # Initialize map with 'F' (free) cells
+        game_map = [['F' for _ in range(cols)] for _ in range(rows)]
+
+        # Starting point
+        game_map[0][0] = 'S'
+
+        # Ensure 'G' is placed at the bottom-right corner
+        game_map[-1][-1] = 'G'
+
+        # Create a guaranteed solvable path from S to G
+        cur_row, cur_col = 0, 0
+
+        # Randomly add holes, ensuring 'G' remains at its location
+        for _ in range(int(rows * cols * 0.6)):  # Adjust density of 'H' as needed
+            r, c = random.randint(0, rows - 1), random.randint(0, cols - 1)
+            if game_map[r][c] == 'F':
+                game_map[r][c] = 'H'
+
+        while cur_row < rows - 1 or cur_col < cols - 1:
+            if cur_row < rows - 1 and (random.choice([True, False]) or cur_col == cols - 1):
+                cur_row += 1  # Move down
+            else:
+                cur_col += 1  # Move right
+            if cur_row < rows and cur_col < cols:
+                game_map[cur_row][cur_col] = 'F'  # Mark path as 'F'
+
+
+        # Reaffirm 'G' placement in case of overwrites
+        game_map[-1][-1] = 'G'
+
+        return ["".join(row) for row in game_map]
+
+    def load_map(self, map_name):
+        # Simplified map loader
+        if map_name == "4x4":
+            return [
+                "SFFF",
+                "FHFH",
+                "FFFH",
+                "HFFG"
+            ]
+        elif map_name == "8x8":
+            return [
+                "SFFFFFFF",
+                "FFFFFFFF",
+                "FFFHFFFF",
+                "FFFFFHFF",
+                "FFFHFFFF",
+                "FHHFFFHF",
+                "FHFFHFHF",
+                "FFFHFFFG"
+            ]
+        else:
+            # Extract rows and cols from the map_name
+            try:
+                dimensions = map_name.split('x')
+                rows, cols = int(dimensions[0]), int(dimensions[1])
+                return self.generate_solvable_map(rows, cols)
+            except ValueError:
+                raise ValueError("Invalid map size format. Use 'NxN' format.")
+
+    def step(self, action):
+
+        if self.is_slippery:
+            # With some probability, choose a random action instead of the intended one
+            if random.random() < 0.33:  # Adjust this probability as needed
+                action = self.action_space_sample()
+
+        # Simplified step function with directional movement.
+        rows = len(self.map_layout)
+        cols = len(self.map_layout[0])
+        reward = 0
+        terminated = False
+        truncated = False  # Assuming this version doesn't use truncation.
+        info = {}  # Placeholder for additional info.
+
+        # Calculate current position
+        row = self.state // cols
+        col = self.state % cols
+
+        # Determine new position based on action
+        if action == 0:  # Left
+            col = max(0, col - 1)
+        elif action == 1:  # Down
+            row = min(rows - 1, row + 1)
+        elif action == 2:  # Right
+            col = min(cols - 1, col + 1)
+        elif action == 3:  # Up
+            row = max(0, row - 1)
+
+        # Update state
+        self.state = row * cols + col
+
+        # Check for game termination conditions
+        cell = self.map_layout[row][col]
+        if cell == 'G':
+            terminated = True
+            reward = 1
+        elif cell == 'H':
+            terminated = True
+
+        if (self.render_mode == 'human'):
+            self.render();
+
+        return self.state, reward, terminated, truncated, info
+
+    def reset(self):
+        self.state = 0
+        self.done = False
+
+        if (self.render_mode == 'human'):
+            self.render();
+
+        return self.state, {}
+
+    def render(self):
+        global win, win_size;
+        if self.render_mode != 'human':
+            return
+
+        # Load tiles
+        tiles = {
+            'S': load_image('start'),
+            'F': load_image('free'),
+            'H': load_image('hole'),
+            'G': load_image('goal'),
+            'WTL': load_image('wall_top_left'),  # Wall Top Left
+            'WTR': load_image('wall_top_right'),  # Wall Top Right
+        }
+
+        state = self.state
+        map_layout = self.map_layout
+        grid_size = len(self.map_layout)
+        #tile_width, tile_height = tiles['F'].get_size()
+        tile_width, tile_height = 32, 16
+
+        # Calculate the offset to center the map
+        offset_x = win_size[0] // 2 - (tile_width * grid_size) // 4
+        offset_y = 150  # Adjust as needed
+
+        win.fill((0, 0, 0))  # Clear the screen
+
+        # Render tiles in isometric view
+        for i, row in enumerate(map_layout):
+            for j, cell in enumerate(row):
+
+
+
+
+
+                # Draw the tile
+                tile_type = cell
+                #if (j) == (0): #this must me in minus
+                    #tile_type = 'WTL'  # Top left wall for the first cell
+                #elif (i) == (0): #this must be in minus
+                    #tile_type = 'WTR'  # Top right wall for the last cell in the first row
+
+                this_tile_offset = tiles[tile_type].get_size()[1];
+                # Convert grid coordinates to isometric
+                iso_x = (j - i) * (tile_width // 2) + offset_x
+                iso_y = (j + i) * (tile_height // 2) + offset_y - this_tile_offset
+
+                win.blit(tiles[tile_type], (iso_x, iso_y))
+
+                # Highlight the current position (additional logic needed for isometric highlighting)
+                if self.state == i * grid_size + j:
+                    # Example: Overlay a semi-transparent rectangle or use a special tile
+                    pass  # Implement highlighting logic here
+
+        pygame.display.flip()
+
+
+    def renderOld(self):
+        global win, win_size;
+
+        state = self.state;
+        # Determine grid size from the map layout
+        map_layout = self.map_layout;
+        grid_size = len(self.map_layout)
+        cell_size = win_size[0] // grid_size
+        clock = pygame.time.Clock()
+
+        win.fill((0, 0, 0))  # Clear the screen
+
+        # Draw grid and highlight tiles based on the dynamic map layout
+        for i, row in enumerate(map_layout):
+            for j, cell in enumerate(row):
+                color = (255, 255, 255)  # Default to white for ice
+                if cell == 'H':
+                    color = (255, 0, 0)  # Red for holes
+                elif cell == 'G':
+                    color = (0, 255, 255)  # Cyan for goal
+
+                rect = pygame.Rect(j * cell_size, i * cell_size, cell_size, cell_size)
+                pygame.draw.rect(win, color, rect)  # Fill cell
+                pygame.draw.rect(win, (255, 255, 255), rect, 1)  # Cell border
+
+        # Highlight current position
+        row = state // grid_size
+        col = state % grid_size
+        highlight_rect = pygame.Rect(col * cell_size, row * cell_size, cell_size, cell_size)
+        pygame.draw.rect(win, (0, 255, 0), highlight_rect)  # Green for player
+
+        pygame.display.flip()  # Update the display
+        clock.tick(30)  # Cap the frame rate
+
+    def close(self):
+        global pygame, win, win_size;
+        pygame.quit()
+        # Placeholder for any cleanup tasks.
+        # For example, if using Pygame for rendering:
+        # pygame.quit()
+        pass
+
+    def DisableDisplay(self):
+        self.render_mode = None
+
+    def EnableDisplay(self):
+        self.render_mode = 'human'
+
+    def SetTitle(self, param):
+        print(param)
+        pygame.display.set_caption("FrozenLake: "+param)
+        pass
 
 
 # Define model
@@ -40,7 +295,7 @@ class ReplayMemory():
 
 
 # FrozeLake Deep Q-Learning
-class FrozenLakeDQL():
+class FrozenLakeDQL:
     # Hyperparameters (adjustable)
     learning_rate_a = 0.001  # learning rate (alpha)
     discount_factor_g = 0.9  # discount rate (gamma)
@@ -55,12 +310,10 @@ class FrozenLakeDQL():
     ACTIONS = ['L', 'D', 'R', 'U']  # for printing 0,1,2,3 => L(eft),D(own),R(ight),U(p)
 
     # Train the FrozeLake environment
-    def train(self, episodes, render=False, is_slippery=False, size="4x4"):
-        # Create FrozenLake instance
-        env = gym.make('FrozenLake-v1', map_name=size, is_slippery=is_slippery,
-                       render_mode='human' if render else None)
-        num_states = env.observation_space.n
-        num_actions = env.action_space.n
+    def train(self, env: FrozenLakeGame, episodes):
+
+        num_states = env.observation_space
+        num_actions = env.action_space
 
         epsilon = 1  # 1 = 100% random actions
         memory = ReplayMemory(self.replay_memory_size)
@@ -88,6 +341,8 @@ class FrozenLakeDQL():
         step_count = 0
 
         for i in range(episodes):
+            env.SetTitle("Train episode {}/{}".format(i + 1, episodes))
+
             state = env.reset()[0]  # Initialize to state 0
             terminated = False  # True when agent falls in hole or reached goal
             truncated = False  # True when agent takes more than 200 actions
@@ -98,7 +353,7 @@ class FrozenLakeDQL():
                 # Select action based on epsilon-greedy
                 if random.random() < epsilon:
                     # select random action
-                    action = env.action_space.sample()  # actions: 0=left,1=down,2=right,3=up
+                    action = env.action_space_sample()  # actions: 0=left,1=down,2=right,3=up
                 else:
                     # select best action
                     with torch.no_grad():
@@ -134,12 +389,10 @@ class FrozenLakeDQL():
                     target_dqn.load_state_dict(policy_dqn.state_dict())
                     step_count = 0
 
-        # Close environment
-        env.close()
-
         # Save policy
-        torch.save(policy_dqn.state_dict(), "frozen_lake_dql_"+str(size)+".pt")
+        torch.save(policy_dqn.state_dict(), "frozen_lake_dql_" + str(env.map_name) + ".pt")
 
+        # Close environment
         # Create new graph
         plt.figure(1)
 
@@ -155,7 +408,7 @@ class FrozenLakeDQL():
         plt.plot(epsilon_history)
 
         # Save plots
-        plt.savefig("frozen_lake_dql_"+str(size)+".png")
+        plt.savefig("frozen_lake_dql_" + str(env.map_name) + ".png")
 
     # Optimize policy network
     def optimize(self, mini_batch, policy_dqn, target_dqn):
@@ -212,21 +465,21 @@ class FrozenLakeDQL():
         return input_tensor
 
     # Run the FrozeLake environment with the learned policy
-    def test(self, episodes, is_slippery=False, size = "4x4"):
+    def test(self, env: FrozenLakeGame, episodes):
         # Create FrozenLake instance
-        env = gym.make('FrozenLake-v1', map_name=size, is_slippery=is_slippery, render_mode='human')
-        num_states = env.observation_space.n
-        num_actions = env.action_space.n
+        num_states = env.observation_space
+        num_actions = env.action_space
 
         # Load learned policy
         policy_dqn = DQN(in_states=num_states, h1_nodes=num_states, out_actions=num_actions)
-        policy_dqn.load_state_dict(torch.load("frozen_lake_dql_"+str(size)+".pt"))
+        policy_dqn.load_state_dict(torch.load("frozen_lake_dql_" + str(env.map_name) + ".pt"))
         policy_dqn.eval()  # switch model to evaluation mode
 
         print('Policy (trained):')
         self.print_dqn(policy_dqn)
 
         for i in range(episodes):
+            env.SetTitle("Test episode {}/{}".format(i + 1, episodes))
             state = env.reset()[0]  # Initialize to state 0
             terminated = False  # True when agent falls in hole or reached goal
             truncated = False  # True when agent takes more than 200 actions
@@ -240,30 +493,18 @@ class FrozenLakeDQL():
                 # Execute action
                 state, reward, terminated, truncated, _ = env.step(action)
 
-        env.close()
+    def play(self, env: FrozenLakeGame):
 
-    def play(self, is_slippery=False, size="4x4"):
-        pygame.init()
-        win_size = (400, 400)
-        win = pygame.display.set_mode(win_size)
-        pygame.display.set_caption("FrozenLake Play")
-
-        env = gym.make('FrozenLake-v1', map_name=size, is_slippery=is_slippery)
+        env.SetTitle("Play the game")
         env.reset()
 
         # Correctly decode the env.desc to get the map layout
-        map_layout = [[cell.decode('utf-8') for cell in row] for row in env.desc]
-
-        # Determine grid size from the map layout
-        grid_size = len(map_layout)
-        cell_size = win_size[0] // grid_size
+        map_layout = env.map_layout
 
         action_mapping = {pygame.K_LEFT: 0, pygame.K_DOWN: 1, pygame.K_RIGHT: 2, pygame.K_UP: 3}
 
         state, info = env.reset()
         terminated = False
-
-        clock = pygame.time.Clock()
 
         while not terminated:
             for event in pygame.event.get():
@@ -281,34 +522,6 @@ class FrozenLakeDQL():
                             else:
                                 print("Oops, you fell into a hole!")
                         state = new_state
-
-            win.fill((0, 0, 0))  # Clear the screen
-
-            # Draw grid and highlight tiles based on the dynamic map layout
-            for i, row in enumerate(map_layout):
-                for j, cell in enumerate(row):
-                    color = (255, 255, 255)  # Default to white for ice
-                    if cell == 'H':
-                        color = (255, 0, 0)  # Red for holes
-                    elif cell == 'G':
-                        color = (0, 255, 255)  # Cyan for goal
-
-                    rect = pygame.Rect(j * cell_size, i * cell_size, cell_size, cell_size)
-                    pygame.draw.rect(win, color, rect)  # Fill cell
-                    pygame.draw.rect(win, (255, 255, 255), rect, 1)  # Cell border
-
-            # Highlight current position
-            row = state // grid_size
-            col = state % grid_size
-            highlight_rect = pygame.Rect(col * cell_size, row * cell_size, cell_size, cell_size)
-            pygame.draw.rect(win, (0, 255, 0), highlight_rect)  # Green for player
-
-            pygame.display.flip()  # Update the display
-            clock.tick(30)  # Cap the frame rate
-
-        pygame.quit()
-        env.close()
-
 
     # Print DQN: state, best action, q values
     def print_dqn(self, dqn):
@@ -334,12 +547,21 @@ class FrozenLakeDQL():
 
 
 import os
+
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 if __name__ == '__main__':
     frozen_lake = FrozenLakeDQL()
     is_slippery = False
-    map_size = "8x8"
-    #frozen_lake.train(5000, is_slippery=is_slippery, size=map_size)
-    #frozen_lake.test(10, is_slippery=is_slippery, size=map_size)
-    frozen_lake.play(is_slippery=is_slippery, size=map_size)
+    map_size = "4x4"
+
+    env = FrozenLakeGame(map_name=map_size, is_slippery=is_slippery, render_mode='human')
+    #http://www.1up-games.com/nes/solstice/map.html
+
+    env.DisableDisplay()
+    #frozen_lake.train(env, 10000)
+    env.EnableDisplay()
+    #frozen_lake.test(env, 10)
+    frozen_lake.play(env)
+
+    env.close()
