@@ -7,13 +7,11 @@ from torch import nn
 import torch.nn.functional as F
 import pygame
 
-def load_image(name):
-    """Loads an image from the 'tiles/' directory."""
-    return pygame.image.load(f'tiles/{name}.png')
 
 
 class FrozenLakeGame:
     def __init__(self, map_name="4x4", is_slippery=False, render_mode="human"):
+        self.last_action = None
         global win, win_size;
         self.map_name = map_name
         self.is_slippery = is_slippery
@@ -118,6 +116,7 @@ class FrozenLakeGame:
         row = self.state // cols
         col = self.state % cols
 
+        self.last_action = action;
         # Determine new position based on action
         if action == 0:  # Left
             col = max(0, col - 1)
@@ -153,62 +152,121 @@ class FrozenLakeGame:
 
         return self.state, {}
 
+
+
     def render(self):
-        global win, win_size;
+        global win, win_size
         if self.render_mode != 'human':
             return
 
-        # Load tiles
+        def load_image(name):
+            """Loads an image from the 'tiles/' directory."""
+            return pygame.image.load(f'tiles/{name}.png')
+
+        scale_factor = 2;
+        def load_image_scaled(image_name, scale_factor=2):
+            # Load the image using your existing load_image function
+            image = load_image(image_name)
+            # Get the current size of the image
+            original_size = image.get_size()
+            # Calculate the new size based on the scale factor
+            new_size = (int(original_size[0] * scale_factor), int(original_size[1] * scale_factor))
+            # Scale the image to the new size
+            scaled_image = pygame.transform.scale(image, new_size)
+            return scaled_image
+
+        # Load tiles with added default and wall tiles
         tiles = {
-            'S': load_image('start'),
-            'F': load_image('free'),
-            'H': load_image('hole'),
-            'G': load_image('goal'),
-            'WTL': load_image('wall_top_left'),  # Wall Top Left
-            'WTR': load_image('wall_top_right'),  # Wall Top Right
+            'CL': load_image_scaled('char_left',scale_factor),
+            'CB': load_image_scaled('char_bottom',scale_factor),
+            'CR': load_image_scaled('char_right',scale_factor),
+            'CT': load_image_scaled('char_top',scale_factor),
+            'S': load_image_scaled('start',scale_factor),
+            'F': load_image_scaled('free',scale_factor),
+            'H': load_image_scaled('hole',scale_factor),
+            'G': load_image_scaled('goal',scale_factor),
+            'WTL': load_image_scaled('wall_top_left',scale_factor),  # Wall Top Left
+            'WTR': load_image_scaled('wall_top_right',scale_factor),  # Wall Top Right
         }
 
         state = self.state
         map_layout = self.map_layout
         grid_size = len(self.map_layout)
-        #tile_width, tile_height = tiles['F'].get_size()
-        tile_width, tile_height = 32, 16
+        # Assume each tile has fixed size for simplicity
+        tile_width, tile_height = 32*scale_factor, 16*scale_factor
 
-        # Calculate the offset to center the map
-        offset_x = win_size[0] // 2 - (tile_width * grid_size) // 4
-        offset_y = 150  # Adjust as needed
+        # This time, calculate offset to center the (-1, -1) tile
+        # First, find the center of the window
+        center_x = win_size[0] / 2
+        center_y = win_size[1] / 2
+
+        # Calculate offset_x such that (-1, -1) tile's center is at window's center
+        # We adjust for half a tile width because (-1, -1) is off-center to the left
+        # and we move it up by half the total map height in isometric projection to align top
+        offset_x = center_x - (tile_width // 2)
+
+        # Calculate offset_y to place (-1, -1) at the top of the screen
+        # We take into account the entire height of the map in isometric projection
+        # and adjust it so the top is at the center_y, moving it up by half the height of one tile
+        total_height_iso = (grid_size * tile_height // 2) * 2  # Total height in isometric view
+        offset_y = total_height_iso + (tile_height)
 
         win.fill((0, 0, 0))  # Clear the screen
 
-        # Render tiles in isometric view
-        for i, row in enumerate(map_layout):
-            for j, cell in enumerate(row):
 
 
+        def drawChar(row,col):
 
 
+            tile_type = "CR"
+            if(self.last_action==0):
+                tile_type = "CL"
+            elif(self.last_action==1):
+                tile_type = "CB"
+            elif(self.last_action==2):
+                tile_type = "CR"
+            elif(self.last_action==3):
+                tile_type = "CT"
+            this_tile_offset_y = tiles[tile_type].get_size()[1]+16*scale_factor
+            this_tile_offset_x = tiles[tile_type].get_size()[0]/2
+            # Convert grid coordinates to isometric, including walls
+            iso_x = (col - row) * (tile_width // 2) + offset_x + tile_width/2 - this_tile_offset_x
+            iso_y = (col + row) * (tile_height // 2) + offset_y - this_tile_offset_y
+            win.blit(tiles[tile_type], (iso_x, iso_y))
 
-                # Draw the tile
-                tile_type = cell
-                #if (j) == (0): #this must me in minus
-                    #tile_type = 'WTL'  # Top left wall for the first cell
-                #elif (i) == (0): #this must be in minus
-                    #tile_type = 'WTR'  # Top right wall for the last cell in the first row
+        # Render tiles in isometric view, including boundary for walls
+        for i in range(-1, grid_size ):
+            for j in range(-1, grid_size ):
+                # Determine the type of tile
+                if i == -1 or j == -1:
+                    if (j) == (-1): #this must me in minus
+                        tile_type = 'WTL'  # Top left wall for the first cell
+                    elif (i) == (-1): #this must be in minus
+                        tile_type = 'WTR'  # Top right wall for the last cell in the first row
 
-                this_tile_offset = tiles[tile_type].get_size()[1];
-                # Convert grid coordinates to isometric
-                iso_x = (j - i) * (tile_width // 2) + offset_x
-                iso_y = (j + i) * (tile_height // 2) + offset_y - this_tile_offset
+                else:
+                    tile_type = map_layout[i][j]
+                    if state == i * grid_size + j:
+                        # Logic to change the tile based on the state, if needed
+                        # For example, marking the current position differently
+                        pass  # Implement state-based logic here
+
+                this_tile_offset_y = tiles[tile_type].get_size()[1]
+                this_tile_offset_x = tiles[tile_type].get_size()[0]/2
+
+                # Convert grid coordinates to isometric, including walls
+                iso_x = (j - i) * (tile_width // 2) + offset_x + tile_width/2 - this_tile_offset_x
+                iso_y = (j + i) * (tile_height // 2) + offset_y - this_tile_offset_y
 
                 win.blit(tiles[tile_type], (iso_x, iso_y))
 
-                # Highlight the current position (additional logic needed for isometric highlighting)
-                if self.state == i * grid_size + j:
-                    # Example: Overlay a semi-transparent rectangle or use a special tile
-                    pass  # Implement highlighting logic here
+                row = self.state // grid_size
+                col = self.state % grid_size
+                if(col==j and row==i):
+                    drawChar(i, j);
+
 
         pygame.display.flip()
-
 
     def renderOld(self):
         global win, win_size;
@@ -221,6 +279,7 @@ class FrozenLakeGame:
         clock = pygame.time.Clock()
 
         win.fill((0, 0, 0))  # Clear the screen
+
 
         # Draw grid and highlight tiles based on the dynamic map layout
         for i, row in enumerate(map_layout):
@@ -501,7 +560,7 @@ class FrozenLakeDQL:
         # Correctly decode the env.desc to get the map layout
         map_layout = env.map_layout
 
-        action_mapping = {pygame.K_LEFT: 0, pygame.K_DOWN: 1, pygame.K_RIGHT: 2, pygame.K_UP: 3}
+        action_mapping = {pygame.K_LEFT: 0, pygame.K_DOWN: 1, pygame.K_RIGHT: 2, pygame.K_UP: 3, pygame.K_r: 'reset'}
 
         state, info = env.reset()
         terminated = False
@@ -512,16 +571,25 @@ class FrozenLakeDQL:
                     terminated = True
                 elif event.type == pygame.KEYDOWN:
                     if event.key in action_mapping:
-                        action = action_mapping[event.key]
-                        new_state, reward, terminated, truncated, _ = env.step(action)
-                        print(
-                            f"Action: {['Left', 'Down', 'Right', 'Up'][action]}, New State: {new_state}, Reward: {reward}")
-                        if terminated:
-                            if reward == 1:
-                                print("Congratulations, you've reached the goal!")
-                            else:
-                                print("Oops, you fell into a hole!")
-                        state = new_state
+                        if action_mapping[event.key] == 'reset':
+                            # Regenerate the map and reset position
+                            if hasattr(env, 'generate_solvable_map'):
+                                dimensions = env.map_name.split('x')
+                                rows, cols = int(dimensions[0]), int(dimensions[1])
+                                env.map_layout = env.generate_solvable_map(rows, cols)
+                            state, info = env.reset()
+                            print("Map regenerated and position reset.")
+                        else:
+                            action = action_mapping[event.key]
+                            new_state, reward, terminated, truncated, _ = env.step(action)
+                            print(
+                                f"Action: {['Left', 'Down', 'Right', 'Up'][action]}, New State: {new_state}, Reward: {reward}")
+                            if terminated:
+                                if reward == 1:
+                                    print("Congratulations, you've reached the goal!")
+                                else:
+                                    print("Oops, you fell into a hole!")
+                            state = new_state
 
     # Print DQN: state, best action, q values
     def print_dqn(self, dqn):
@@ -553,7 +621,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 if __name__ == '__main__':
     frozen_lake = FrozenLakeDQL()
     is_slippery = False
-    map_size = "4x4"
+    map_size = "6x6"
 
     env = FrozenLakeGame(map_name=map_size, is_slippery=is_slippery, render_mode='human')
     #http://www.1up-games.com/nes/solstice/map.html
