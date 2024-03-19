@@ -79,7 +79,7 @@ class FrozenLakeGame:
             ]
         elif map_name == "8x8":
             return [
-                "SFFFFFFF",
+                "SFFFFFKF",
                 "FFFFFFFF",
                 "FFFHFFFF",
                 "FFFFFHFF",
@@ -185,6 +185,7 @@ class FrozenLakeGame:
             'F': load_image_scaled('free',scale_factor),
             'H': load_image_scaled('hole',scale_factor),
             'G': load_image_scaled('goal',scale_factor),
+            'K': load_image_scaled('key',scale_factor),
             'WTL': load_image_scaled('wall_top_left',scale_factor),  # Wall Top Left
             'WTR': load_image_scaled('wall_top_right',scale_factor),  # Wall Top Right
         }
@@ -621,7 +622,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 if __name__ == '__main__':
     frozen_lake = FrozenLakeDQL()
     is_slippery = False
-    map_size = "6x6"
+    map_size = "8x8"
 
     env = FrozenLakeGame(map_name=map_size, is_slippery=is_slippery, render_mode='human')
     #http://www.1up-games.com/nes/solstice/map.html
