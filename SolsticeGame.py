@@ -2,15 +2,18 @@ import json
 import random
 import pygame
 
+
 class SolsticeGame:
-    def __init__(self, level_index=1, game_skin ="default"):
+    def __init__(self, level_index=1, game_skin="default"):
         self.level_name = None
         self.skins = ['default', 'portal', 'bombs', 'forest', 'ice', 'castle']
         self.skin = game_skin
         self.last_action = None
         global win, win_size;
-        self.LoadLevel(level_index)
+        self.level_index = level_index
+        self.map_layout = self.load_map_layout(self.level_index)
 
+        self.step_count = 0
         self.is_dizzy = False
         self.state = 0
         self.done = False
@@ -63,7 +66,7 @@ class SolsticeGame:
 
         return ["".join(row) for row in game_map]
 
-    def load_map(self, level_index):
+    def load_map_layout(self, level_index):
 
         # Construct the file name based on the level identifier
         file_name = f"levels/level_{level_index}.json"
@@ -83,6 +86,9 @@ class SolsticeGame:
             return self.generate_solvable_map(8, 8)  # Fallback to a default map
 
     def step(self, action):
+        self.step_count = self.step_count + 1;
+
+
 
         if self.is_dizzy:
             # With some probability, choose a random action instead of the intended one
@@ -93,8 +99,8 @@ class SolsticeGame:
         rows = len(self.map_layout)
         cols = len(self.map_layout[0])
         reward = 0
-        terminated = False
-        truncated = False  # Assuming this version doesn't use truncation.
+        is_terminated = False
+        is_truncated = False  # TMP removed
         info = {}  # Placeholder for additional info.
 
         # Calculate current position
@@ -120,18 +126,18 @@ class SolsticeGame:
         self.moveAllMobs("M", ".")
 
         # Check for game termination conditions
-        cell_prev= self.map_layout[row_prev][col_prev]
+        cell_prev = self.map_layout[row_prev][col_prev]
         if cell_prev == 'U':
             self.replaceThisCell(row_prev, col_prev, "H")
 
         cell = self.map_layout[row][col]
         if cell == 'G':
-            terminated = True
+            is_terminated = True
             reward = 1
         elif cell == 'H':
-            terminated = True
+            is_terminated = True
         elif cell == 'M':
-            terminated = True
+            is_terminated = True
         elif cell == 'D':
             self.is_dizzy = True
             self.replaceThisCell(row, col, ".")
@@ -143,10 +149,12 @@ class SolsticeGame:
             self.replaceThisCell(row, col, ".")
             self.replaceAllCells("C", "G")
 
+        if (self.step_count > 200):
+            is_truncated = True;
 
         self.render();
 
-        return self.state, reward, terminated, truncated, info
+        return self.state, reward, is_terminated, is_truncated, info
 
     def replaceThisCell(self, row, col, new_type):
         """
@@ -200,9 +208,11 @@ class SolsticeGame:
         return 0
 
     def reset(self):
-        self.LoadLevel(self.level_index);
+        self.level_index = self.level_index
+        self.map_layout = self.load_map_layout(self.level_index)
         self.state = self.GetDefaultPlayerPosition()
         self.done = False
+        self.step_count = 0
         self.is_dizzy = False
 
         self.render();
@@ -212,7 +222,8 @@ class SolsticeGame:
     def render(self):
         global win, win_size
         if self.enableRendering == False:
-            return
+            return;
+
 
         def load_image(skin, name):
             """Loads an image from the 'tiles/' directory."""
@@ -230,7 +241,6 @@ class SolsticeGame:
             # Scale the image to the new size
             scaled_image = pygame.transform.scale(image, new_size)
             return scaled_image
-
 
         # Load tiles with added default and wall tiles
         tiles = {
@@ -256,6 +266,11 @@ class SolsticeGame:
         map_layout = self.map_layout
         grid_size_rows = len(self.map_layout)
         grid_size_cols = len(self.map_layout[0])
+
+
+        current_row = self.state // grid_size_cols
+        current_col = self.state % grid_size_cols
+
         # Assume each tile has fixed size for simplicity
         tile_width, tile_height = 32 * scale_factor, 16 * scale_factor
 
@@ -273,7 +288,7 @@ class SolsticeGame:
         # We take into account the entire height of the map in isometric projection
         # and adjust it so the top is at the center_y, moving it up by half the height of one tile
         total_height_iso = (grid_size_rows * tile_height // 2) * 2  # Total height in isometric view
-        offset_y = tile_height*2+tile_height*3+160
+        offset_y = tile_height * 2 + tile_height * 3 + 160
 
         win.fill((0, 0, 0))  # Clear the screen
 
@@ -295,8 +310,6 @@ class SolsticeGame:
             iso_y = (col + row) * (tile_height // 2) + offset_y - this_tile_offset_y
             win.blit(tiles[tile_type], (iso_x, iso_y))
 
-        current_row = self.state // grid_size_cols
-        current_col = self.state % grid_size_cols
 
         # Render tiles in isometric view, including boundary for walls
         for i in range(-1, grid_size_rows):
@@ -310,7 +323,6 @@ class SolsticeGame:
 
                 else:
                     tile_type = map_layout[i][j]
-
 
                 this_tile_offset_y = tiles[tile_type].get_size()[1]
                 this_tile_offset_x = tiles[tile_type].get_size()[0] / 2
@@ -326,40 +338,40 @@ class SolsticeGame:
 
             # Define your colors
 
-        #TODO: draw over tall the stuff the image: tiles/frame.png - make it in the middle - its just the same size as window
+
+
+
         # Load the frame image and scale it to the window size
         frame_image = pygame.image.load('tiles/frame.png')
-
         # Draw (blit) the frame image over everything else
         win.blit(frame_image, (0, 0))
 
-        # Example usage
+
+        self.SetDescription( "Level " + str(self.level_index) + "  " + str(current_col) + "x" + str(current_row)+"\r\n"
+        "Steps "+str(self.step_count));
+
+
+
+        # Level header
         self.draw_text_with_gradient(
-            "Level "+str(self.level_index)+"  "+str(current_col)+"x"+str(current_row), (30, 604), "font/solstice-nes.ttf", 18,
-                                (193, 223, 254),
-                                (29, 99, 214))
-        # Example usage
-        self.draw_text_with_gradient(
-            ""+str(self.level_name), (30, 30), "font/solstice-nes.ttf", 18,
+            "" + str(self.level_name), (30, 30),
             (231, 255, 165),
             (0, 150, 0))
 
-        # Example usage
-
+        # Level footer
 
         self.draw_text_with_gradient(
-            "=Train =Evaluate =Reset level =Skin change", (8, 714), "font/solstice-nes.ttf", 18,
+            "=Train =Evaluate =Reset =Next =Skin", (8, 714),
             (231, 255, 165),
             (0, 150, 0))
-
-
-
-
 
         pygame.display.flip()
 
-    def draw_text_with_gradient(self, text, position, font_path, font_size, top_color, bottom_color):
+    def draw_text_with_gradient(self, text, position, top_color, bottom_color):
         global win, win_size
+
+        font_path = "font/solstice-nes.ttf";
+        font_size = 18;
 
         # Load the custom font
         font = pygame.font.Font(font_path, font_size)
@@ -388,9 +400,6 @@ class SolsticeGame:
                 gradient_surface.blit(text_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
                 win.blit(gradient_surface, (x_pos, position[1]))
                 x_pos += gradient_surface.get_width()
-
-
-
 
     def renderOld(self):
         global win, win_size;
@@ -440,6 +449,12 @@ class SolsticeGame:
     def EnableDisplay(self):
         self.enableRendering = True
 
+    def SetDescription(self, param):
+        self.draw_text_with_gradient(
+            param, (30, 604),
+            (193, 223, 254),
+            (29, 99, 214))
+        pass
     def SetTitle(self, param):
         print(param)
         pygame.display.set_caption("Solstice: " + param)
@@ -447,14 +462,13 @@ class SolsticeGame:
 
     def Won(self):
         print("Congratulations, you've reached the goal!")
-        self.LoadLevel(self.level_index+1)
-        return self.reset()
+        self.level_index = self.level_index + 1;
+        return self.NextLevel()
 
     def Lost(self):
         print("Oops, you fell into a hole or died!")
         return self.reset()
 
-    def LoadLevel(self, level_index):
-        self.level_index = level_index
-        self.map_layout = self.load_map(level_index)
-
+    def NextLevel(self):
+        self.level_index = self.level_index + 1;
+        return self.reset()

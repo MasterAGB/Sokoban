@@ -57,7 +57,7 @@ class SolsticeDQL:
     # Train the Solstice environment
     def train(self, game: SolsticeGame, episodes):
         epsilon = 1  # 1 = 100% random actions
-        memory = ReplayMemory(self.replay_memory_size) #Size is 1000
+        memory = ReplayMemory(int(max(self.replay_memory_size,episodes))) #Size is 1000
 
         # Create policy and target network.
         policy_dqn = DQN(in_states=game.level_size, h1_nodes=game.level_size, out_actions=game.action_size)
@@ -84,11 +84,11 @@ class SolsticeDQL:
         for i in range(episodes):
             game.SetTitle("Train episode {}/{}".format(i + 1, episodes))
 
-            state = game.reset()[0]  # Initialize to state 0
-            is_terminated = False  # True when agent falls in hole or reached goal
-            is_truncated = False  # True when agent takes more than 200 actions
+            state = game.reset()[0]  # Initialize to start state
+            is_terminated = False  # True when agent dies or reached goal
+            is_truncated = False  # True when agent takes more than X actions
 
-            # Agent navigates map until it falls into hole/reaches goal (terminated), or has taken 200 actions (truncated).
+            # Agent navigates map until it dies/reaches goal (terminated), or has taken 200 actions (truncated).
             while (not is_terminated and not is_truncated):
 
                 # Select action based on epsilon-greedy
@@ -133,8 +133,10 @@ class SolsticeDQL:
         # Save policy
         torch.save(policy_dqn.state_dict(), "solstice_dql_" + str(game.level_index) + ".pt")
 
-        # Close environment
+
+
         # Create new graph
+        #TODO: i need to reset this plt here, so its not showing later more graphs on the same
         plt.figure(1)
 
         # Plot average rewards (Y-axis) vs episodes (X-axis)
@@ -151,6 +153,8 @@ class SolsticeDQL:
         # Save plots
         plt.savefig("solstice_dql_" + str(game.level_index) + ".png")
 
+        plt.show()
+
     # Optimize policy network
     def optimize(self, mini_batch, policy_dqn, target_dqn):
 
@@ -163,7 +167,7 @@ class SolsticeDQL:
         for state, action, new_state, reward, terminated in mini_batch:
 
             if terminated:
-                # Agent either reached goal (reward=1) or fell into hole (reward=0)
+                # Agent either reached goal (reward=1+) or died (reward=0)
                 # When in a terminated state, target q value should be set to the reward.
                 target = torch.FloatTensor([reward])
             else:
@@ -205,14 +209,10 @@ class SolsticeDQL:
         input_tensor[state] = 1
         return input_tensor
 
-    # Run the Solstice environment with the learned policy
+    # Run the Solstice game with the learned policy
     def test(self, game: SolsticeGame, episodes):
-        # Create Solstice instance
-        num_states = game.level_size
-        num_actions = game.action_size
-
         # Load learned policy
-        policy_dqn = DQN(in_states=num_states, h1_nodes=num_states, out_actions=num_actions)
+        policy_dqn = DQN(in_states=game.level_size, h1_nodes=game.level_size, out_actions=game.action_size)
         policy_dqn.load_state_dict(torch.load("solstice_dql_" + str(game.level_index) + ".pt"))
         policy_dqn.eval()  # switch model to evaluation mode
 
@@ -222,17 +222,17 @@ class SolsticeDQL:
         for i in range(episodes):
             game.SetTitle("Test episode {}/{}".format(i + 1, episodes))
             state = game.reset()[0]  # Initialize to state 0
-            terminated = False  # True when agent falls in hole or reached goal
-            truncated = False  # True when agent takes more than 200 actions
+            is_terminated = False  # True when agent falls in hole or reached goal
+            is_truncated = False  # True when agent takes more than 200 actions
 
-            # Agent navigates map until it falls into a hole (terminated), reaches goal (terminated), or has taken 200 actions (truncated).
-            while (not terminated and not truncated):
+            # Agent navigates map until it dies (terminated), reaches goal (terminated), or has taken 200 actions (truncated).
+            while (not is_terminated and not is_truncated):
                 # Select best action
                 with torch.no_grad():
-                    action = policy_dqn(self.state_to_dqn_input(state, num_states)).argmax().item()
+                    action = policy_dqn(self.state_to_dqn_input(state, game.level_size)).argmax().item()
 
                 # Execute action
-                state, reward, terminated, truncated, _ = game.step(action)
+                state, reward, is_terminated, is_truncated, _ = game.step(action)
 
     def play(self, game: SolsticeGame):
 
@@ -251,15 +251,16 @@ class SolsticeDQL:
             pygame.K_s: 'skin',
             pygame.K_t: 'train',
             pygame.K_e: 'test',
+            pygame.K_n: 'next',
         }
 
         state, info = game.reset()
-        terminated = False
+        is_terminated = False
 
-        while not terminated:
+        while not is_terminated:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    terminated = True
+                    is_terminated = True
                 elif event.type == pygame.KEYDOWN:
                     if event.key in action_mapping:
                         if action_mapping[event.key] == 'reset':
@@ -271,27 +272,32 @@ class SolsticeDQL:
                             game.skin = random.choice(game.skins)
                             game.render()
                             print(f"Skin changed to {game.skin}.")
+                        elif action_mapping[event.key] == 'next':
+                            print("Next level loading");
+                            game.NextLevel();
+                            game.render()
+                            print(f"Skin changed to {game.skin}.")
                         elif action_mapping[event.key] == 'train':
                             game.DisableDisplay()
-                            solstice.train(game, 1500)
+                            solsticeDQL.train(game, 2000)
                             game.EnableDisplay()
                             print(f"Training the game.")
                         elif action_mapping[event.key] == 'test':
-                            solstice.test(game, 10)
+                            solsticeDQL.test(game, 10)
                             print(f"Testing the game.")
                         else:
                             action = action_mapping[event.key]
-                            new_state, reward, terminated, truncated, _ = game.step(action)
+                            new_state, reward, is_terminated, is_truncated, _ = game.step(action)
                             state = new_state
                             print(
                                 f"Action: {['Left', 'Down', 'Right', 'Up'][action]}, New State: {new_state}, Reward: {reward}")
-                            if terminated:
+                            if is_terminated:
                                 if reward >= 1:
                                     state, info = game.Won();
-                                    terminated = False
+                                    is_terminated = False
                                 else:
                                     state, info = game.Lost();
-                                    terminated = False
+                                    is_terminated = False
 
     # Print DQN: state, best action, q values
     def print_dqn(self, dqn):
@@ -315,14 +321,11 @@ class SolsticeDQL:
             if (s + 1) % 4 == 0:
                 print()  # Print a newline every 4 states
 
-
+# http://www.1up-games.com/nes/solstice/map.html
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 if __name__ == '__main__':
-    solstice = SolsticeDQL()
+    solsticeDQL = SolsticeDQL()
     game = SolsticeGame(level_index=1)
-    # http://www.1up-games.com/nes/solstice/map.html
-
-    solstice.play(game)
-
+    solsticeDQL.play(game)
     game.close()
