@@ -145,11 +145,11 @@ class SolsticeGame:
             self.is_dizzy = False
             self.replaceThisCell(row, col, ".")
         elif cell == 'K':
-            reward = 0.5
+            #reward = 0.5
             self.replaceThisCell(row, col, ".")
             self.replaceAllCells("C", "G")
 
-        if (self.step_count > 200):
+        if (self.step_count > 20000):
             is_truncated = True;
 
         self.render();
@@ -225,6 +225,7 @@ class SolsticeGame:
             return;
 
 
+        clock = pygame.time.Clock()
         def load_image(skin, name):
             """Loads an image from the 'tiles/' directory."""
             return pygame.image.load(f'tiles/{skin}/{name}.png')
@@ -346,94 +347,105 @@ class SolsticeGame:
         # Draw (blit) the frame image over everything else
         win.blit(frame_image, (0, 0))
 
+        descr = "Level " + str(self.level_index) + "  " + str(current_col) + "x" + str(current_row) + "\n";
+        descr += "Steps " + str(self.step_count) + "\n";
+        if(self.is_dizzy):
+            descr += "Poisoned!\n";
 
-        self.SetDescription( "Level " + str(self.level_index) + "  " + str(current_col) + "x" + str(current_row)+"\r\n"
-        "Steps "+str(self.step_count));
+        self.SetDescription(descr);
 
-
-
-        # Level header
-        self.draw_text_with_gradient(
-            "" + str(self.level_name), (30, 30),
-            (231, 255, 165),
-            (0, 150, 0))
-
-        # Level footer
-
-        self.draw_text_with_gradient(
-            "=Train =Evaluate =Reset =Next =Skin", (8, 714),
-            (231, 255, 165),
-            (0, 150, 0))
+        self.SetHeader();
+        self.SetFooter();
 
         pygame.display.flip()
+        clock.tick(10)  # Cap the frame rate
 
     def draw_text_with_gradient(self, text, position, top_color, bottom_color):
         global win, win_size
 
-        font_path = "font/solstice-nes.ttf";
-        font_size = 18;
+        font_path = "font/solstice-nes.ttf"
+        font_size = 18
 
         # Load the custom font
         font = pygame.font.Font(font_path, font_size)
 
-        # Initial X position
-        x_pos = position[0]
+        # Split the text into lines based on "\n"
+        lines = text.split("\n")
 
-        # Split the text into segments based on "=" sign
-        segments = text.split("=")
-        for i, segment in enumerate(segments):
-            if i > 0:  # For segments following "=" signs, render the first character in white
-                first_char_surface = font.render(segment[0], True, pygame.Color('white'))
-                win.blit(first_char_surface, (x_pos, position[1]))
-                x_pos += first_char_surface.get_width()
-                segment = segment[1:]  # Remove the first character since it's already rendered
+        # Starting Y position for the first line
+        y_pos = position[1]
 
-            # Render the remaining segment with gradient
-            if segment:  # Check if segment is not empty
-                text_surface = font.render(segment, True, pygame.Color('white'))
-                gradient_surface = pygame.Surface(text_surface.get_size(), pygame.SRCALPHA)
-                for y in range(text_surface.get_height()):
-                    # Calculate the color for the current position
-                    alpha = y / text_surface.get_height()
-                    color = [top_color[j] * (1 - alpha) + bottom_color[j] * alpha for j in range(3)]
-                    pygame.draw.line(gradient_surface, color, (0, y), (text_surface.get_width(), y))
-                gradient_surface.blit(text_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-                win.blit(gradient_surface, (x_pos, position[1]))
-                x_pos += gradient_surface.get_width()
+        for line in lines:
+            # Initial X position for the line
+            x_pos = position[0]
 
-    def renderOld(self):
-        global win, win_size;
+            # Split the line into segments based on "=" sign
+            segments = line.split("=")
+            for i, segment in enumerate(segments):
+                if i > 0:  # For segments following "=" signs, render the first character in white
+                    first_char_surface = font.render(segment[0], True, pygame.Color('white'))
+                    win.blit(first_char_surface, (x_pos, y_pos))
+                    x_pos += first_char_surface.get_width()
+                    segment = segment[1:]  # Remove the first character since it's already rendered
 
-        state = self.state;
-        # Determine grid size from the map layout
-        map_layout = self.map_layout;
-        grid_size = len(self.map_layout)
-        cell_size = win_size[0] // grid_size
-        clock = pygame.time.Clock()
+                # Render the remaining segment with gradient
+                if segment:  # Check if segment is not empty
+                    text_surface = font.render(segment, True, pygame.Color('white'))
+                    gradient_surface = pygame.Surface(text_surface.get_size(), pygame.SRCALPHA)
+                    for y in range(text_surface.get_height()):
+                        # Calculate the color for the current position
+                        alpha = y / text_surface.get_height()
+                        color = [top_color[j] * (1 - alpha) + bottom_color[j] * alpha for j in range(3)]
+                        pygame.draw.line(gradient_surface, color, (0, y), (text_surface.get_width(), y))
+                    gradient_surface.blit(text_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+                    win.blit(gradient_surface, (x_pos, y_pos))
+                    x_pos += gradient_surface.get_width()
 
-        win.fill((0, 0, 0))  # Clear the screen
+            # Move Y position down for the next line
+            y_pos += text_surface.get_height()
 
-        # Draw grid and highlight tiles based on the dynamic map layout
-        for i, row in enumerate(map_layout):
-            for j, cell in enumerate(row):
-                color = (255, 255, 255)  # Default to white for ice
-                if cell == 'H':
-                    color = (255, 0, 0)  # Red for holes
-                elif cell == 'G':
-                    color = (0, 255, 255)  # Cyan for goal
 
-                rect = pygame.Rect(j * cell_size, i * cell_size, cell_size, cell_size)
-                pygame.draw.rect(win, color, rect)  # Fill cell
-                pygame.draw.rect(win, (255, 255, 255), rect, 1)  # Cell border
+    def RenderScreen(self, descr, avatar):
+        global win, win_size
 
-        # Highlight current position
-        row = state // grid_size
-        col = state % grid_size
-        highlight_rect = pygame.Rect(col * cell_size, row * cell_size, cell_size, cell_size)
-        pygame.draw.rect(win, (0, 255, 0), highlight_rect)  # Green for player
+        # Load the frame image and scale it to the window size
+        frame_image = pygame.image.load('tiles/frame.png')
+        # Draw (blit) the frame image over everything else
+        win.blit(frame_image, (0, 0))
 
-        pygame.display.flip()  # Update the display
-        clock.tick(30)  # Cap the frame rate
+        # Load the frame image and scale it to the window size
+        avatar_image = pygame.image.load('tiles/'+avatar+'.jpg')
+        # Define the target rectangle for the avatar
+        x, y, x2, y2 = 591, 590, 722, 689
+        target_width = x2 - x
+        target_height = y2 - y
+
+        # Calculate the scale factor to fit the avatar into the target rectangle
+        # Preserve the aspect ratio of the avatar
+        avatar_width = avatar_image.get_width()
+        avatar_height = avatar_image.get_height()
+        scale_factor = min(target_width / avatar_width, target_height / avatar_height)
+
+        # Scale the avatar image
+        scaled_avatar = pygame.transform.scale(avatar_image,
+                                               (int(avatar_width * scale_factor), int(avatar_height * scale_factor)))
+
+        # Calculate the top-left position to center the avatar in the target rectangle
+        # This is optional if you want the avatar to be centered within the target area
+        avatar_x = x + (target_width - scaled_avatar.get_width()) // 2
+        avatar_y = y + (target_height - scaled_avatar.get_height()) // 2
+
+        # Draw (blit) the scaled avatar image over everything else at the calculated position
+        win.blit(scaled_avatar, (avatar_x, avatar_y))
+
+        self.SetDescription(descr);
+        self.SetHeader();
+        self.SetFooter();
+
+        pygame.display.flip()
+
+
+
 
     def close(self):
         global pygame, win, win_size;
@@ -472,3 +484,22 @@ class SolsticeGame:
     def NextLevel(self):
         self.level_index = self.level_index + 1;
         return self.reset()
+
+    def PrevLevel(self):
+        self.level_index = self.level_index - 1;
+        return self.reset()
+
+    def SetHeader(self):
+
+        # Level header
+        self.draw_text_with_gradient(
+            "" + str(self.level_name), (30, 30),
+            (231, 255, 165),
+            (0, 150, 0))
+
+    def SetFooter(self):
+
+        self.draw_text_with_gradient(
+            "=Train =Evaluate =Reset =Next =Prev =Skin", (8, 714),
+            (231, 255, 165),
+            (0, 150, 0))

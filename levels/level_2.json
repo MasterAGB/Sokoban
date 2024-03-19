@@ -1,16 +1,32 @@
 {
-    "index": 2,
-    "name": "The Portal Chambers",
-    "style": "forest",
-    "map_structure": [
-        "....S....",
-        "..UUU....",
-        ".UU.C.UU.",
-        ".....UU..",
-        "..U...U..",
-        ".UU...U..",
-        "..U.UUU..",
-        ".....U.G.",
-        "........."
-    ]
+  "index": 1,
+  "name": "Whispering Woods",
+  "style": "forest",
+  "map_structure": [
+    "....C....",
+    ".........",
+    "HHHH.HHHH",
+    "HHHH.HHHH",
+    "HHHD.PHHH",
+    "HHHH.HHHH",
+    "HHHH.HHHH",
+    ".........",
+    "S.......K"
+  ],
+  "comment": [
+    "Here's a breakdown of the symbols used in the levels and their meanings for your level designer:",
+    "S: Starting point of the level.",
+    ". (Dot): Free space where the player can move.",
+    "H: Hole, a tile the player should avoid.",
+    "M: Monster, an obstacle that moves and can be avoided or requires specific actions to bypass.",
+
+    "U: Unstable tile, a tile that disappears after the player steps on it once.",
+
+    "D: Dizzy tile, temporarily alters player's control or vision.",
+    "P: Potion, restores the player's normal state or provides bonuses.",
+
+    "K: Key, an item that can be collected for rewards or to unlock paths.",
+    "C: Closed goal point, that must be unlocked by the Key",
+    "G: Goal point of the level, where the player must reach to complete the level."
+  ]
 }

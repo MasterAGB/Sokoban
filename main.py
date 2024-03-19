@@ -56,6 +56,9 @@ class SolsticeDQL:
 
     # Train the Solstice environment
     def train(self, game: SolsticeGame, episodes):
+
+        game.RenderScreen("Train in progress\n"+str(episodes)+" episodes", "evil")
+
         epsilon = 1  # 1 = 100% random actions
         memory = ReplayMemory(int(max(self.replay_memory_size,episodes))) #Size is 1000
 
@@ -133,6 +136,7 @@ class SolsticeDQL:
         # Save policy
         torch.save(policy_dqn.state_dict(), "solstice_dql_" + str(game.level_index) + ".pt")
 
+        game.RenderScreen("Train completed!\n" + str(episodes) + " episodes", "wizard")
 
 
         # Create new graph
@@ -250,8 +254,10 @@ class SolsticeDQL:
             pygame.K_r: 'reset',
             pygame.K_s: 'skin',
             pygame.K_t: 'train',
+            pygame.K_h: 'hardcoretrain',
             pygame.K_e: 'test',
             pygame.K_n: 'next',
+            pygame.K_p: 'prev',
         }
 
         state, info = game.reset()
@@ -277,11 +283,21 @@ class SolsticeDQL:
                             game.NextLevel();
                             game.render()
                             print(f"Skin changed to {game.skin}.")
+                        elif action_mapping[event.key] == 'prev':
+                            print("Prev level loading");
+                            game.PrevLevel();
+                            game.render()
+                            print(f"Skin changed to {game.skin}.")
                         elif action_mapping[event.key] == 'train':
                             game.DisableDisplay()
-                            solsticeDQL.train(game, 2000)
+                            solsticeDQL.train(game, 1000)
                             game.EnableDisplay()
                             print(f"Training the game.")
+                        elif action_mapping[event.key] == 'hardcoretrain':
+                            game.DisableDisplay()
+                            solsticeDQL.train(game, 20000)
+                            game.EnableDisplay()
+                            print(f"Training the game hardcore.")
                         elif action_mapping[event.key] == 'test':
                             solsticeDQL.test(game, 10)
                             print(f"Testing the game.")
@@ -321,7 +337,6 @@ class SolsticeDQL:
             if (s + 1) % 4 == 0:
                 print()  # Print a newline every 4 states
 
-# http://www.1up-games.com/nes/solstice/map.html
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 if __name__ == '__main__':
