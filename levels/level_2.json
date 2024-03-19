@@ -1,0 +1,16 @@
+{
+    "index": 2,
+    "name": "The Portal Chambers",
+    "style": "forest",
+    "map_structure": [
+        "....S....",
+        "..UUU....",
+        ".UU.C.UU.",
+        ".....UU..",
+        "..U...U..",
+        ".UU...U..",
+        "..U.UUU..",
+        ".....U.G.",
+        "........."
+    ]
+}

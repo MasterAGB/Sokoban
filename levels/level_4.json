@@ -1,0 +1,11 @@
+{
+    "index": 4,
+    "name": "Snowy Obstacle",
+    "style": "portal",
+    "map_structure": [
+        "S...",
+        ".H..",
+        ".H.H",
+        "...G"
+    ]
+}

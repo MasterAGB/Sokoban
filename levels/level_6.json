@@ -1,0 +1,11 @@
+{
+    "index": 6,
+    "name": "Wintery Hazard",
+    "style": "bombs",
+    "map_structure": [
+        "S...",
+        ".H..",
+        "...H",
+        "H..G"
+    ]
+}

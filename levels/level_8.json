@@ -1,0 +1,12 @@
+{
+    "index": 8,
+    "name": "Glacial Passage",
+    "style": "portal",
+    "map_structure": [
+        "S...",
+        "....",
+        ".H..",
+        ".HH.",
+        "...G"
+    ]
+}

@@ -1,4 +1,4 @@
-import gymnasium as gym
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import deque
@@ -6,9 +6,11 @@ import random
 import torch
 from torch import nn
 import torch.nn.functional as F
+import pygame
+
+from SolsticeGame import SolsticeGame
 
 
-# Define model
 class DQN(nn.Module):
     def __init__(self, in_states, h1_nodes, out_actions):
         super().__init__()
@@ -38,9 +40,8 @@ class ReplayMemory():
         return len(self.memory)
 
 
-# FrozeLake Deep Q-Learning
-class FrozenLakeDQL():
-    # Hyperparameters (adjustable)
+# Solstice Deep Q-Learning
+class SolsticeDQL:
     learning_rate_a = 0.001  # learning rate (alpha)
     discount_factor_g = 0.9  # discount rate (gamma)
     network_sync_rate = 10  # number of steps the agent takes before syncing the policy and target network
@@ -49,29 +50,23 @@ class FrozenLakeDQL():
 
     # Neural Network
     loss_fn = nn.MSELoss()  # NN Loss function. MSE=Mean Squared Error can be swapped to something else.
+
     optimizer = None  # NN Optimizer. Initialize later.
 
-    ACTIONS = ['L', 'D', 'R', 'U']  # for printing 0,1,2,3 => L(eft),D(own),R(ight),U(p)
 
-    # Train the FrozeLake environment
-    def train(self, episodes, render=False, is_slippery=False):
-        # Create FrozenLake instance
-        env = gym.make('FrozenLake-v1', map_name="4x4", is_slippery=is_slippery,
-                       render_mode='human' if render else None)
-        num_states = env.observation_space.n
-        num_actions = env.action_space.n
-
+    # Train the Solstice environment
+    def train(self, game: SolsticeGame, episodes):
         epsilon = 1  # 1 = 100% random actions
-        memory = ReplayMemory(self.replay_memory_size)
+        memory = ReplayMemory(self.replay_memory_size) #Size is 1000
 
-        # Create policy and target network. Number of nodes in the hidden layer can be adjusted.
-        policy_dqn = DQN(in_states=num_states, h1_nodes=num_states, out_actions=num_actions)
-        target_dqn = DQN(in_states=num_states, h1_nodes=num_states, out_actions=num_actions)
+        # Create policy and target network.
+        policy_dqn = DQN(in_states=game.level_size, h1_nodes=game.level_size, out_actions=game.action_size)
+        target_dqn = DQN(in_states=game.level_size, h1_nodes=game.level_size, out_actions=game.action_size)
 
         # Make the target and policy networks the same (copy weights/biases from one network to the other)
         target_dqn.load_state_dict(policy_dqn.state_dict())
 
-        print('Policy (random, before training):')
+        print('Policy network - random, before training:')
         self.print_dqn(policy_dqn)
 
         # Policy network optimizer. "Adam" optimizer can be swapped to something else.
@@ -87,27 +82,29 @@ class FrozenLakeDQL():
         step_count = 0
 
         for i in range(episodes):
-            state = env.reset()[0]  # Initialize to state 0
-            terminated = False  # True when agent falls in hole or reached goal
-            truncated = False  # True when agent takes more than 200 actions
+            game.SetTitle("Train episode {}/{}".format(i + 1, episodes))
+
+            state = game.reset()[0]  # Initialize to state 0
+            is_terminated = False  # True when agent falls in hole or reached goal
+            is_truncated = False  # True when agent takes more than 200 actions
 
             # Agent navigates map until it falls into hole/reaches goal (terminated), or has taken 200 actions (truncated).
-            while (not terminated and not truncated):
+            while (not is_terminated and not is_truncated):
 
                 # Select action based on epsilon-greedy
                 if random.random() < epsilon:
                     # select random action
-                    action = env.action_space.sample()  # actions: 0=left,1=down,2=right,3=up
+                    action = game.action_space_sample()  # actions: 0=left,1=down,2=right,3=up
                 else:
                     # select best action
                     with torch.no_grad():
-                        action = policy_dqn(self.state_to_dqn_input(state, num_states)).argmax().item()
+                        action = policy_dqn(self.state_to_dqn_input(state, game.level_size)).argmax().item()
 
                 # Execute action
-                new_state, reward, terminated, truncated, _ = env.step(action)
+                new_state, reward, is_terminated, is_truncated, _ = game.step(action)
 
                 # Save experience into memory
-                memory.append((state, action, new_state, reward, terminated))
+                memory.append((state, action, new_state, reward, is_terminated))
 
                 # Move to the next state
                 state = new_state
@@ -116,8 +113,8 @@ class FrozenLakeDQL():
                 step_count += 1
 
             # Keep track of the rewards collected per episode.
-            if reward == 1:
-                rewards_per_episode[i] = 1
+            if reward >= 1:
+                rewards_per_episode[i] = reward
 
             # Check if enough experience has been collected and if at least 1 reward has been collected
             if len(memory) > self.mini_batch_size and np.sum(rewards_per_episode) > 0:
@@ -133,12 +130,10 @@ class FrozenLakeDQL():
                     target_dqn.load_state_dict(policy_dqn.state_dict())
                     step_count = 0
 
-        # Close environment
-        env.close()
-
         # Save policy
-        torch.save(policy_dqn.state_dict(), "frozen_lake_dql.pt")
+        torch.save(policy_dqn.state_dict(), "solstice_dql_" + str(game.level_index) + ".pt")
 
+        # Close environment
         # Create new graph
         plt.figure(1)
 
@@ -154,7 +149,7 @@ class FrozenLakeDQL():
         plt.plot(epsilon_history)
 
         # Save plots
-        plt.savefig('frozen_lake_dql.png')
+        plt.savefig("solstice_dql_" + str(game.level_index) + ".png")
 
     # Optimize policy network
     def optimize(self, mini_batch, policy_dqn, target_dqn):
@@ -199,7 +194,7 @@ class FrozenLakeDQL():
 
     '''
     Converts an state (int) to a tensor representation.
-    For example, the FrozenLake 4x4 map has 4x4=16 states numbered from 0 to 15. 
+    For example, the Solstice 4x4 map has 4x4=16 states numbered from 0 to 15. 
 
     Parameters: state=1, num_states=16
     Return: tensor([0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
@@ -210,23 +205,23 @@ class FrozenLakeDQL():
         input_tensor[state] = 1
         return input_tensor
 
-    # Run the FrozeLake environment with the learned policy
-    def test(self, episodes, is_slippery=False):
-        # Create FrozenLake instance
-        env = gym.make('FrozenLake-v1', map_name="4x4", is_slippery=is_slippery, render_mode='human')
-        num_states = env.observation_space.n
-        num_actions = env.action_space.n
+    # Run the Solstice environment with the learned policy
+    def test(self, game: SolsticeGame, episodes):
+        # Create Solstice instance
+        num_states = game.level_size
+        num_actions = game.action_size
 
         # Load learned policy
         policy_dqn = DQN(in_states=num_states, h1_nodes=num_states, out_actions=num_actions)
-        policy_dqn.load_state_dict(torch.load("frozen_lake_dql.pt"))
+        policy_dqn.load_state_dict(torch.load("solstice_dql_" + str(game.level_index) + ".pt"))
         policy_dqn.eval()  # switch model to evaluation mode
 
         print('Policy (trained):')
         self.print_dqn(policy_dqn)
 
         for i in range(episodes):
-            state = env.reset()[0]  # Initialize to state 0
+            game.SetTitle("Test episode {}/{}".format(i + 1, episodes))
+            state = game.reset()[0]  # Initialize to state 0
             terminated = False  # True when agent falls in hole or reached goal
             truncated = False  # True when agent takes more than 200 actions
 
@@ -237,9 +232,66 @@ class FrozenLakeDQL():
                     action = policy_dqn(self.state_to_dqn_input(state, num_states)).argmax().item()
 
                 # Execute action
-                state, reward, terminated, truncated, _ = env.step(action)
+                state, reward, terminated, truncated, _ = game.step(action)
 
-        env.close()
+    def play(self, game: SolsticeGame):
+
+        game.SetTitle("Play the game")
+        game.reset()
+
+        # Correctly decode the env.desc to get the map layout
+        map_layout = game.map_layout
+
+        action_mapping = {
+            pygame.K_LEFT: 0,
+            pygame.K_DOWN: 1,
+            pygame.K_RIGHT: 2,
+            pygame.K_UP: 3,
+            pygame.K_r: 'reset',
+            pygame.K_s: 'skin',
+            pygame.K_t: 'train',
+            pygame.K_e: 'test',
+        }
+
+        state, info = game.reset()
+        terminated = False
+
+        while not terminated:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    terminated = True
+                elif event.type == pygame.KEYDOWN:
+                    if event.key in action_mapping:
+                        if action_mapping[event.key] == 'reset':
+                            # Regenerate the map and reset position
+                            game.map_layout = game.generate_solvable_map(8, 8)
+                            state, info = game.reset()
+                            print("Map regenerated and position reset.")
+                        elif action_mapping[event.key] == 'skin':
+                            game.skin = random.choice(game.skins)
+                            game.render()
+                            print(f"Skin changed to {game.skin}.")
+                        elif action_mapping[event.key] == 'train':
+                            game.DisableDisplay()
+                            solstice.train(game, 1500)
+                            game.EnableDisplay()
+                            print(f"Training the game.")
+                        elif action_mapping[event.key] == 'test':
+                            solstice.test(game, 10)
+                            print(f"Testing the game.")
+                        else:
+                            action = action_mapping[event.key]
+                            new_state, reward, terminated, truncated, _ = game.step(action)
+                            state = new_state
+                            print(
+                                f"Action: {['Left', 'Down', 'Right', 'Up'][action]}, New State: {new_state}, Reward: {reward}")
+                            if terminated:
+                                if reward >= 1:
+                                    state, info = game.Won();
+                                    terminated = False
+                                else:
+                                    state, info = game.Lost();
+                                    terminated = False
 
     # Print DQN: state, best action, q values
     def print_dqn(self, dqn):
@@ -255,20 +307,22 @@ class FrozenLakeDQL():
             q_values = q_values.rstrip()  # Remove space at the end
 
             # Map the best action to L D R U
-            best_action = self.ACTIONS[dqn(self.state_to_dqn_input(s, num_states)).argmax()]
+            best_action = ['Left', 'Down', 'Right', 'Up'][dqn(self.state_to_dqn_input(s, num_states)).argmax()]
 
             # Print policy in the format of: state, action, q values
-            # The printed layout matches the FrozenLake map.
+            # The printed layout matches the Solstice map.
             print(f'{s:02},{best_action},[{q_values}]', end=' ')
             if (s + 1) % 4 == 0:
                 print()  # Print a newline every 4 states
 
 
-import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 if __name__ == '__main__':
-    frozen_lake = FrozenLakeDQL()
-    is_slippery = True
-    #frozen_lake.train(5000, is_slippery=is_slippery)
-    frozen_lake.test(10, is_slippery=is_slippery)
+    solstice = SolsticeDQL()
+    game = SolsticeGame(level_index=1)
+    # http://www.1up-games.com/nes/solstice/map.html
+
+    solstice.play(game)
+
+    game.close()

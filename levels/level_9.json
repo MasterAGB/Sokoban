@@ -1,0 +1,12 @@
+{
+    "index": 9,
+    "name": "Blizzard Blitz",
+    "style": "default",
+    "map_structure": [
+        "S...",
+        ".H.H",
+        "....",
+        "H...",
+        "...G"
+    ]
+}

@@ -1,0 +1,12 @@
+{
+    "index": 7,
+    "name": ".rostbite Challenge",
+    "style": "forest",
+    "map_structure": [
+        "S...",
+        ".H..",
+        ".H.H",
+        "...H",
+        "...G"
+    ]
+}

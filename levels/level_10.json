@@ -1,0 +1,12 @@
+{
+    "index": 10,
+    "name": "Ice Capade",
+    "style": "bombs",
+    "map_structure": [
+        "S...",
+        "....",
+        ".H.H",
+        "...H",
+        "H..G"
+    ]
+}
