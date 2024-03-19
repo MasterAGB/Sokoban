@@ -8,13 +8,14 @@ import torch.nn.functional as F
 import pygame
 
 
-
 class FrozenLakeGame:
-    def __init__(self, map_name="4x4", is_slippery=False, render_mode="human"):
+    def __init__(self, map_name="4x4", is_dizzy=False, render_mode="human", game_skin ="default"):
+        self.skins = ['default', 'portal', 'bombs', 'forest']
+        self.skin = game_skin
         self.last_action = None
         global win, win_size;
         self.map_name = map_name
-        self.is_slippery = is_slippery
+        self.is_dizzy = is_dizzy
         self.map_layout = self.load_map(map_name)
         self.state = 0
         self.done = False
@@ -27,7 +28,7 @@ class FrozenLakeGame:
         self.action_space = 4  # Assuming Left, Down, Right, Up
 
         pygame.init()
-        win_size = (400, 400)
+        win_size = (600, 600)
         win = pygame.display.set_mode(win_size)
         pygame.display.set_caption("FrozenLake Play")
 
@@ -60,8 +61,7 @@ class FrozenLakeGame:
             else:
                 cur_col += 1  # Move right
             if cur_row < rows and cur_col < cols:
-                game_map[cur_row][cur_col] = 'F'  # Mark path as 'F'
-
+                game_map[cur_row][cur_col] = 'U'  # Mark path as 'F'
 
         # Reaffirm 'G' placement in case of overwrites
         game_map[-1][-1] = 'G'
@@ -72,21 +72,21 @@ class FrozenLakeGame:
         # Simplified map loader
         if map_name == "4x4":
             return [
-                "SFFF",
+                "SFFM",
                 "FHFH",
                 "FFFH",
-                "HFFG"
+                "HKFC"
             ]
         elif map_name == "8x8":
             return [
                 "SFFFFFKF",
-                "FFFFFFFF",
+                "FFFFFFMF",
                 "FFFHFFFF",
                 "FFFFFHFF",
                 "FFFHFFFF",
                 "FHHFFFHF",
                 "FHFFHFHF",
-                "FFFHFFFG"
+                "FFFHFFFC"
             ]
         else:
             # Extract rows and cols from the map_name
@@ -99,7 +99,7 @@ class FrozenLakeGame:
 
     def step(self, action):
 
-        if self.is_slippery:
+        if self.is_dizzy:
             # With some probability, choose a random action instead of the intended one
             if random.random() < 0.33:  # Adjust this probability as needed
                 action = self.action_space_sample()
@@ -115,6 +115,8 @@ class FrozenLakeGame:
         # Calculate current position
         row = self.state // cols
         col = self.state % cols
+        row_prev = row;
+        col_prev = col;
 
         self.last_action = action;
         # Determine new position based on action
@@ -130,43 +132,90 @@ class FrozenLakeGame:
         # Update state
         self.state = row * cols + col
 
+        self.moveAllMobs("M", "F")
+
         # Check for game termination conditions
+        cell_prev= self.map_layout[row_prev][col_prev]
+        if cell_prev == 'U':
+            self.replaceThisCell(row_prev, col_prev, "H")
+
         cell = self.map_layout[row][col]
         if cell == 'G':
             terminated = True
             reward = 1
         elif cell == 'H':
             terminated = True
+        elif cell == 'M':
+            terminated = True
+        elif cell == 'K':
+            reward = 0.5
+            self.replaceThisCell(row, col, "F")
+            self.replaceAllCells("C", "G")
 
-        if (self.render_mode == 'human'):
-            self.render();
+
+        self.render();
 
         return self.state, reward, terminated, truncated, info
+
+    def replaceThisCell(self, row, col, new_type):
+        """
+        Replace the cell at the specified row and column with the new type.
+        """
+        if 0 <= row < len(self.map_layout) and 0 <= col < len(self.map_layout[0]):
+            self.map_layout[row] = self.map_layout[row][:col] + new_type + self.map_layout[row][col + 1:]
+
+    def moveAllMobs(self, mob_type, allowed_tile):
+        rows = len(self.map_layout)
+        cols = len(self.map_layout[0])
+        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]  # Left, Right, Up, Down
+        mobs_positions = [(r, c) for r in range(rows) for c in range(cols) if self.map_layout[r][c] == mob_type]
+
+        for r, c in mobs_positions:
+            random.shuffle(directions)  # Shuffle directions to randomize mob movement
+            moved = False
+            for dr, dc in directions:
+                new_r, new_c = r + dr, c + dc
+                if 0 <= new_r < rows and 0 <= new_c < cols and self.map_layout[new_r][new_c] == allowed_tile:
+                    # Move mob to new position
+                    self.map_layout[r] = self.map_layout[r][:c] + allowed_tile + self.map_layout[r][c + 1:]
+                    self.map_layout[new_r] = self.map_layout[new_r][:new_c] + mob_type + self.map_layout[new_r][
+                                                                                         new_c + 1:]
+                    moved = True
+                    break  # Break after moving to avoid trying other directions
+
+            if not moved:
+                # If the mob cannot move (all adjacent tiles are not allowed), it stays in its current position
+                continue
+
+    def replaceAllCells(self, from_type, to_type):
+        """
+        Replace all instances of one cell type with another throughout the map.
+        """
+        for row in range(len(self.map_layout)):
+            self.map_layout[row] = self.map_layout[row].replace(from_type, to_type)
 
     def reset(self):
         self.state = 0
         self.done = False
 
-        if (self.render_mode == 'human'):
-            self.render();
+        self.render();
 
         return self.state, {}
-
-
 
     def render(self):
         global win, win_size
         if self.render_mode != 'human':
             return
 
-        def load_image(name):
+        def load_image(skin, name):
             """Loads an image from the 'tiles/' directory."""
-            return pygame.image.load(f'tiles/{name}.png')
+            return pygame.image.load(f'tiles/{skin}/{name}.png')
 
         scale_factor = 2;
-        def load_image_scaled(image_name, scale_factor=2):
+
+        def load_image_scaled(skin, image_name, scale_factor=2):
             # Load the image using your existing load_image function
-            image = load_image(image_name)
+            image = load_image(skin, image_name)
             # Get the current size of the image
             original_size = image.get_size()
             # Calculate the new size based on the scale factor
@@ -175,26 +224,30 @@ class FrozenLakeGame:
             scaled_image = pygame.transform.scale(image, new_size)
             return scaled_image
 
+
         # Load tiles with added default and wall tiles
         tiles = {
-            'CL': load_image_scaled('char_left',scale_factor),
-            'CB': load_image_scaled('char_bottom',scale_factor),
-            'CR': load_image_scaled('char_right',scale_factor),
-            'CT': load_image_scaled('char_top',scale_factor),
-            'S': load_image_scaled('start',scale_factor),
-            'F': load_image_scaled('free',scale_factor),
-            'H': load_image_scaled('hole',scale_factor),
-            'G': load_image_scaled('goal',scale_factor),
-            'K': load_image_scaled('key',scale_factor),
-            'WTL': load_image_scaled('wall_top_left',scale_factor),  # Wall Top Left
-            'WTR': load_image_scaled('wall_top_right',scale_factor),  # Wall Top Right
+            'CL': load_image_scaled('char', 'char_left', scale_factor),
+            'CB': load_image_scaled('char', 'char_bottom', scale_factor),
+            'CR': load_image_scaled('char', 'char_right', scale_factor),
+            'CT': load_image_scaled('char', 'char_top', scale_factor),
+            'S': load_image_scaled(self.skin, 'start', scale_factor),
+            'F': load_image_scaled(self.skin, 'free', scale_factor),
+            'H': load_image_scaled(self.skin, 'hole', scale_factor),
+            'G': load_image_scaled(self.skin, 'goal', scale_factor),
+            'C': load_image_scaled(self.skin, 'goalClosed', scale_factor),
+            'K': load_image_scaled(self.skin, 'key', scale_factor),
+            'M': load_image_scaled(self.skin, 'mob', scale_factor),
+            'U': load_image_scaled(self.skin, 'unstable', scale_factor),
+            'WTL': load_image_scaled(self.skin, 'wall', scale_factor),  # Wall Top Left
+            'WTR': load_image_scaled(self.skin, 'wall', scale_factor),  # Wall Top Right
         }
 
         state = self.state
         map_layout = self.map_layout
         grid_size = len(self.map_layout)
         # Assume each tile has fixed size for simplicity
-        tile_width, tile_height = 32*scale_factor, 16*scale_factor
+        tile_width, tile_height = 32 * scale_factor, 16 * scale_factor
 
         # This time, calculate offset to center the (-1, -1) tile
         # First, find the center of the window
@@ -210,39 +263,36 @@ class FrozenLakeGame:
         # We take into account the entire height of the map in isometric projection
         # and adjust it so the top is at the center_y, moving it up by half the height of one tile
         total_height_iso = (grid_size * tile_height // 2) * 2  # Total height in isometric view
-        offset_y = total_height_iso + (tile_height)
+        offset_y = tile_height*2+tile_height*3
 
         win.fill((0, 0, 0))  # Clear the screen
 
-
-
-        def drawChar(row,col):
-
+        def drawChar(row, col):
 
             tile_type = "CR"
-            if(self.last_action==0):
+            if (self.last_action == 0):
                 tile_type = "CL"
-            elif(self.last_action==1):
+            elif (self.last_action == 1):
                 tile_type = "CB"
-            elif(self.last_action==2):
+            elif (self.last_action == 2):
                 tile_type = "CR"
-            elif(self.last_action==3):
+            elif (self.last_action == 3):
                 tile_type = "CT"
-            this_tile_offset_y = tiles[tile_type].get_size()[1]+16*scale_factor
-            this_tile_offset_x = tiles[tile_type].get_size()[0]/2
+            this_tile_offset_y = tiles[tile_type].get_size()[1] + 16 * scale_factor
+            this_tile_offset_x = tiles[tile_type].get_size()[0] / 2
             # Convert grid coordinates to isometric, including walls
-            iso_x = (col - row) * (tile_width // 2) + offset_x + tile_width/2 - this_tile_offset_x
+            iso_x = (col - row) * (tile_width // 2) + offset_x + tile_width / 2 - this_tile_offset_x
             iso_y = (col + row) * (tile_height // 2) + offset_y - this_tile_offset_y
             win.blit(tiles[tile_type], (iso_x, iso_y))
 
         # Render tiles in isometric view, including boundary for walls
-        for i in range(-1, grid_size ):
-            for j in range(-1, grid_size ):
+        for i in range(-1, grid_size):
+            for j in range(-1, grid_size):
                 # Determine the type of tile
                 if i == -1 or j == -1:
-                    if (j) == (-1): #this must me in minus
+                    if (j) == (-1):  # this must me in minus
                         tile_type = 'WTL'  # Top left wall for the first cell
-                    elif (i) == (-1): #this must be in minus
+                    elif (i) == (-1):  # this must be in minus
                         tile_type = 'WTR'  # Top right wall for the last cell in the first row
 
                 else:
@@ -253,21 +303,57 @@ class FrozenLakeGame:
                         pass  # Implement state-based logic here
 
                 this_tile_offset_y = tiles[tile_type].get_size()[1]
-                this_tile_offset_x = tiles[tile_type].get_size()[0]/2
+                this_tile_offset_x = tiles[tile_type].get_size()[0] / 2
 
                 # Convert grid coordinates to isometric, including walls
-                iso_x = (j - i) * (tile_width // 2) + offset_x + tile_width/2 - this_tile_offset_x
+                iso_x = (j - i) * (tile_width // 2) + offset_x + tile_width / 2 - this_tile_offset_x
                 iso_y = (j + i) * (tile_height // 2) + offset_y - this_tile_offset_y
 
                 win.blit(tiles[tile_type], (iso_x, iso_y))
 
                 row = self.state // grid_size
                 col = self.state % grid_size
-                if(col==j and row==i):
+                if (col == j and row == i):
                     drawChar(i, j);
 
+            # Define your colors
+        top_color = (193, 223, 254)
+        bottom_color = (29, 99, 214)
+
+        # Example usage
+        self.draw_text_with_gradient(
+            "Your Level Name, Rewards, Game Name", (50, 450), "font/solstice-nes.ttf", 18,
+                                top_color,
+                                bottom_color)
 
         pygame.display.flip()
+
+
+    def draw_text_with_gradient(self, text, position, font_path, font_size, top_color, bottom_color):
+        global win, win_size
+
+        # Load the custom font
+        font = pygame.font.Font(font_path, font_size)
+
+        # Render the text to a new Surface
+        text_surface = font.render(text, True, pygame.Color('white'))
+
+        # Create a vertical gradient
+        gradient_surface = pygame.Surface(text_surface.get_size(), pygame.SRCALPHA)
+        for y in range(text_surface.get_height()):
+            # Calculate the color for the current position
+            alpha = y / text_surface.get_height()
+            color = [top_color[j] * (1 - alpha) + bottom_color[j] * alpha for j in range(3)]
+            pygame.draw.line(gradient_surface, color, (0, y), (text_surface.get_width(), y))
+
+        # Blit the text surface onto the gradient surface
+        gradient_surface.blit(text_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+
+        # Blit the gradient surface to the target surface
+        win.blit(gradient_surface, position)
+
+
+
 
     def renderOld(self):
         global win, win_size;
@@ -280,7 +366,6 @@ class FrozenLakeGame:
         clock = pygame.time.Clock()
 
         win.fill((0, 0, 0))  # Clear the screen
-
 
         # Draw grid and highlight tiles based on the dynamic map layout
         for i, row in enumerate(map_layout):
@@ -320,7 +405,7 @@ class FrozenLakeGame:
 
     def SetTitle(self, param):
         print(param)
-        pygame.display.set_caption("FrozenLake: "+param)
+        pygame.display.set_caption("FrozenLake: " + param)
         pass
 
 
@@ -370,10 +455,10 @@ class FrozenLakeDQL:
     ACTIONS = ['L', 'D', 'R', 'U']  # for printing 0,1,2,3 => L(eft),D(own),R(ight),U(p)
 
     # Train the FrozeLake environment
-    def train(self, env: FrozenLakeGame, episodes):
+    def train(self, game: FrozenLakeGame, episodes):
 
-        num_states = env.observation_space
-        num_actions = env.action_space
+        num_states = game.observation_space
+        num_actions = game.action_space
 
         epsilon = 1  # 1 = 100% random actions
         memory = ReplayMemory(self.replay_memory_size)
@@ -401,9 +486,9 @@ class FrozenLakeDQL:
         step_count = 0
 
         for i in range(episodes):
-            env.SetTitle("Train episode {}/{}".format(i + 1, episodes))
+            game.SetTitle("Train episode {}/{}".format(i + 1, episodes))
 
-            state = env.reset()[0]  # Initialize to state 0
+            state = game.reset()[0]  # Initialize to state 0
             terminated = False  # True when agent falls in hole or reached goal
             truncated = False  # True when agent takes more than 200 actions
 
@@ -413,14 +498,14 @@ class FrozenLakeDQL:
                 # Select action based on epsilon-greedy
                 if random.random() < epsilon:
                     # select random action
-                    action = env.action_space_sample()  # actions: 0=left,1=down,2=right,3=up
+                    action = game.action_space_sample()  # actions: 0=left,1=down,2=right,3=up
                 else:
                     # select best action
                     with torch.no_grad():
                         action = policy_dqn(self.state_to_dqn_input(state, num_states)).argmax().item()
 
                 # Execute action
-                new_state, reward, terminated, truncated, _ = env.step(action)
+                new_state, reward, terminated, truncated, _ = game.step(action)
 
                 # Save experience into memory
                 memory.append((state, action, new_state, reward, terminated))
@@ -432,8 +517,8 @@ class FrozenLakeDQL:
                 step_count += 1
 
             # Keep track of the rewards collected per episode.
-            if reward == 1:
-                rewards_per_episode[i] = 1
+            if reward >= 1:
+                rewards_per_episode[i] = reward
 
             # Check if enough experience has been collected and if at least 1 reward has been collected
             if len(memory) > self.mini_batch_size and np.sum(rewards_per_episode) > 0:
@@ -450,7 +535,7 @@ class FrozenLakeDQL:
                     step_count = 0
 
         # Save policy
-        torch.save(policy_dqn.state_dict(), "frozen_lake_dql_" + str(env.map_name) + ".pt")
+        torch.save(policy_dqn.state_dict(), "frozen_lake_dql_" + str(game.map_name) + ".pt")
 
         # Close environment
         # Create new graph
@@ -468,7 +553,7 @@ class FrozenLakeDQL:
         plt.plot(epsilon_history)
 
         # Save plots
-        plt.savefig("frozen_lake_dql_" + str(env.map_name) + ".png")
+        plt.savefig("frozen_lake_dql_" + str(game.map_name) + ".png")
 
     # Optimize policy network
     def optimize(self, mini_batch, policy_dqn, target_dqn):
@@ -553,17 +638,24 @@ class FrozenLakeDQL:
                 # Execute action
                 state, reward, terminated, truncated, _ = env.step(action)
 
-    def play(self, env: FrozenLakeGame):
+    def play(self, game: FrozenLakeGame):
 
-        env.SetTitle("Play the game")
-        env.reset()
+        game.SetTitle("Play the game")
+        game.reset()
 
         # Correctly decode the env.desc to get the map layout
-        map_layout = env.map_layout
+        map_layout = game.map_layout
 
-        action_mapping = {pygame.K_LEFT: 0, pygame.K_DOWN: 1, pygame.K_RIGHT: 2, pygame.K_UP: 3, pygame.K_r: 'reset'}
+        action_mapping = {
+            pygame.K_LEFT: 0,
+            pygame.K_DOWN: 1,
+            pygame.K_RIGHT: 2,
+            pygame.K_UP: 3,
+            pygame.K_r: 'reset',
+            pygame.K_s: 'skin'
+        }
 
-        state, info = env.reset()
+        state, info = game.reset()
         terminated = False
 
         while not terminated:
@@ -574,22 +666,25 @@ class FrozenLakeDQL:
                     if event.key in action_mapping:
                         if action_mapping[event.key] == 'reset':
                             # Regenerate the map and reset position
-                            if hasattr(env, 'generate_solvable_map'):
-                                dimensions = env.map_name.split('x')
-                                rows, cols = int(dimensions[0]), int(dimensions[1])
-                                env.map_layout = env.generate_solvable_map(rows, cols)
-                            state, info = env.reset()
+                            dimensions = game.map_name.split('x')
+                            rows, cols = int(dimensions[0]), int(dimensions[1])
+                            game.map_layout = game.generate_solvable_map(rows, cols)
+                            state, info = game.reset()
                             print("Map regenerated and position reset.")
+                        elif action_mapping[event.key] == 'skin':
+                            game.skin = random.choice(game.skins)
+                            game.reset()
+                            print(f"Skin changed to {game.skin}.")
                         else:
                             action = action_mapping[event.key]
-                            new_state, reward, terminated, truncated, _ = env.step(action)
+                            new_state, reward, terminated, truncated, _ = game.step(action)
                             print(
                                 f"Action: {['Left', 'Down', 'Right', 'Up'][action]}, New State: {new_state}, Reward: {reward}")
                             if terminated:
                                 if reward == 1:
                                     print("Congratulations, you've reached the goal!")
                                 else:
-                                    print("Oops, you fell into a hole!")
+                                    print("Oops, you fell into a hole or died!")
                             state = new_state
 
     # Print DQN: state, best action, q values
@@ -621,16 +716,16 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 if __name__ == '__main__':
     frozen_lake = FrozenLakeDQL()
-    is_slippery = False
+    is_dizzy = False
     map_size = "8x8"
 
-    env = FrozenLakeGame(map_name=map_size, is_slippery=is_slippery, render_mode='human')
-    #http://www.1up-games.com/nes/solstice/map.html
+    env = FrozenLakeGame(map_name=map_size, is_dizzy=is_dizzy, render_mode='human')
+    # http://www.1up-games.com/nes/solstice/map.html
 
     env.DisableDisplay()
-    #frozen_lake.train(env, 10000)
+    # frozen_lake.train(env, 1000)
     env.EnableDisplay()
-    #frozen_lake.test(env, 10)
+    # frozen_lake.test(env, 10)
     frozen_lake.play(env)
 
     env.close()

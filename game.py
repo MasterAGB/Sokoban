@@ -203,6 +203,29 @@ def set_cell(level, x, y, new_char):
     """Заменяет символ в уровне на заданных координатах на новый символ."""
     level[y] = level[y][:x] + new_char + level[y][x + 1:]
 
+def detect_proximity_to_walls(x, y, level):
+    """Detects if the player is close to walls."""
+    proximity_threshold = 1  # Define how close to a wall is considered "close"
+    wall_proximity = False
+    level_height = len(level)
+    level_width = len(level[0])
+
+    for dx in [-1, 0, 1]:
+        for dy in [-1, 0, 1]:
+            new_x, new_y = x + dx, y + dy
+            # Check boundaries
+            if 0 <= new_x < level_width and 0 <= new_y < level_height:
+                if level[new_y][new_x] == 'W':
+                    wall_proximity = True
+                    return wall_proximity  # No need to check further
+    return wall_proximity
+
+
+def calculate_distance_to_nearest_box(x, y, level):
+    """Calculates the Manhattan distance from the player to the nearest box."""
+    box_positions = [(ix, iy) for iy, row in enumerate(level) for ix, cell in enumerate(row) if cell == 'B']
+    distances = [abs(x - bx) + abs(y - by) for bx, by in box_positions]
+    return min(distances) if distances else 0
 
 def move_player(dx, dy):
     global player_pos, current_level, level, level_floor_orig
@@ -214,66 +237,59 @@ def move_player(dx, dy):
     new_x, new_y = x + dx, y + dy
     target_cell = level[new_y][new_x]
 
-    # Check if the move is into a wall
+    wall_proximity_before = detect_proximity_to_walls(x, y, level)
+    distance_to_box_before = calculate_distance_to_nearest_box(x, y, level)
+
     if target_cell == "W":
-        reward = -1  # Penalize hitting a wall
+        reward = -5  # Significantly penalize hitting a wall
 
-    elif target_cell in ".G":  # Проверяем, является ли клетка свободной или целью.
-        set_cell(level, x, y, level_floor_orig[y][x])
-        set_cell(level, new_x, new_y, "P")  # Перемещаем игрока на новую клетку.
-        player_pos = [new_x, new_y]  # Обновляем позицию игрока.
-        reward = 0.1  # Small reward for a valid move
+    elif target_cell in ".G":
+        set_cell(level, x, y, ".")
+        set_cell(level, new_x, new_y, "P")
+        player_pos = [new_x, new_y]
+        reward = 0.1  # Reward for valid, non-box-pushing move
 
-
-        # Check surroundings for a box after moving
-        adjacent_positions = [(new_x+dx, new_y+dy) for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]]
-        for adj_x, adj_y in adjacent_positions:
-            if 0 <= adj_y < len(level) and 0 <= adj_x < len(level[0]) and level[adj_y][adj_x] == "B":
-                reward += 0.3  # Increase reward for being near a box
-                break  # No need to check further if a box is found
-
-
-    # Проверяем, можно ли переместить ящик
     elif target_cell == "B":
         beyond_x, beyond_y = new_x + dx, new_y + dy
         beyond_target_cell = level[beyond_y][beyond_x]
-        if beyond_target_cell in ".":  # Проверяем, свободно ли место за ящиком
-            set_cell(level, beyond_x, beyond_y, "B")
-            set_cell(level, new_x, new_y, level_floor_orig[y][x])
-            reward = 0.5  # Reward for moving a box
-        elif beyond_target_cell in "G":  # Если за ящиком цель
-            set_cell(level, beyond_x, beyond_y, "F")  # Пометим ящик на цели как "F"
-            set_cell(level, new_x, new_y, level_floor_orig[y][x])
-            reward = 1  # Higher reward for moving a box onto a goal
+        if beyond_target_cell in ".G":
+            set_cell(level, x, y, ".")
+            set_cell(level, new_x, new_y, "P")
+            set_cell(level, beyond_x, beyond_y, "B" if beyond_target_cell == "." else "F")
+            player_pos = [new_x, new_y]
+            reward = 5 if beyond_target_cell == "G" else 1  # Higher reward for moving box onto goal
         else:
             reward = -1  # Penalize if the box cannot be moved
 
-        target_cell = level[new_y][new_x]
-        if target_cell in ".G":
-            set_cell(level, new_x, new_y, "P")  # Перемещаем игрока на новую клетку.
-            set_cell(level, x, y, level_floor_orig[y][x])
-            player_pos = [new_x, new_y]  # Обновляем позицию игрока.
+    wall_proximity_after = detect_proximity_to_walls(new_x, new_y, level)
+    distance_to_box_after = calculate_distance_to_nearest_box(new_x, new_y, level)
 
+    # Adjust rewards based on wall proximity and moving closer to a box
+    if wall_proximity_after:
+        reward -= 0.5  # Penalize being close to a wall
+    if distance_to_box_after < distance_to_box_before:
+        reward += 0.5  # Reward for moving closer to a box
 
-    # Проверяем условие победы после каждого хода
+    # Check for win condition
     if check_win_condition(level):
         reward += 10
         level_completed = True
-
         current_level += 1
         if current_level < len(levels):
             print("Player win - next!")
-            restart_level();
+            restart_level()
         else:
             print("You've completed all levels!")
             pygame.quit()
             sys.exit()
 
+    # Check for lost condition
     if check_lost_condition(level):
-        reward = -10  # Optional penalty for restarting the level
+        reward = -10  # Penalize for losing state
         restart_level()
 
     return reward, level_completed
+
 
 
 
@@ -353,53 +369,42 @@ def simulate_step(action):
 def ai_train(model, episodes, gamma=0.99, epsilon_start=1.0, epsilon_end=0.01, epsilon_decay=0.995):
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     epsilon = epsilon_start
-
     for episode in range(episodes):
-        current_level = 0  # Start from the first level
+        epsilon = max(epsilon_end, epsilon_decay * epsilon)  # Apply epsilon decay
+        current_level = 0
         restart_level()
-        state = game_state_to_tensor(level)  # Convert the state to tensor
+        state = game_state_to_tensor(level)
         total_reward = 0
         done = False
 
         while not done:
-            # Select an action
             action = select_action(state, model, epsilon)
-            # Simulate the step
             next_state, reward, done = simulate_step(action)
 
-            # Update total reward
             total_reward += reward
 
-            # Compute the target reward
+            # Prepare for model update
             with torch.no_grad():
                 future_rewards = model(next_state).max(1)[0].unsqueeze(0)
                 target = reward + gamma * future_rewards * (1 - done)
 
-            # Get the current Q-value estimates
             current_q_values = model(state).gather(1, torch.tensor([[action]]))
-
-            # Calculate loss
             loss = F.smooth_l1_loss(current_q_values, target)
 
-            # Optimize the model
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            # Move to the next state
             state = next_state
 
-            # Update epsilon
-            epsilon = max(epsilon_end, epsilon_decay * epsilon)  # Decrease epsilon
-
-            # Render the game
+            # Rendering the game state
             screen.fill(WHITE)
             draw_level(level, reward, total_reward)
             pygame.display.flip()
 
         print(f"Episode {episode + 1}/{episodes}, Total Reward: {total_reward}")
-
         torch.save(model.state_dict(), f'sokoban_model_state_dict_{episode}.pth')
+
 
 
 
@@ -493,6 +498,6 @@ epsilon = 0.05  # Set to a low value to make the bot exploit its learned behavio
 
 
 
-#ai_train(model, episodes=100)
+ai_train(model, episodes=100)
 #play(True)
-play(False)
+#play(False)
