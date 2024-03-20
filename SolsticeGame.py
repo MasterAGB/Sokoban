@@ -128,6 +128,7 @@ class SolsticeGame:
         self.state = row * cols + col
 
         self.moveAllMobs("M", ".")
+        self.moveAllMobs("F", ".")
 
         # Check for game termination conditions
         cell_prev = self.map_layout[row_prev][col_prev]
@@ -289,11 +290,11 @@ class SolsticeGame:
             'C': load_image_scaled(self.skin, 'goalClosed', scale_factor),
             'K': load_image_scaled(self.skin, 'key', scale_factor),
             'M': load_image_scaled(self.skin, 'mob', scale_factor),
-            'F': load_image_scaled(self.skin, 'mob', scale_factor),
+            'F': load_image_scaled(self.skin, 'mob2', scale_factor),
             'U': load_image_scaled(self.skin, 'unstable', scale_factor),
             'D': load_image_scaled(self.skin, 'dizzy', scale_factor),
             'P': load_image_scaled(self.skin, 'potion', scale_factor),
-            'B': load_image_scaled(self.skin, 'potion', scale_factor),
+            'B': load_image_scaled(self.skin, 'bomb', scale_factor),
             'WTL': load_image_scaled(self.skin, 'wall', scale_factor),  # Wall Top Left
             'WTR': load_image_scaled(self.skin, 'wall', scale_factor),  # Wall Top Right
         }
