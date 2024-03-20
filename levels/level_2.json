@@ -18,7 +18,10 @@
     "S: Starting point of the level.",
     ". (Dot): Free space where the player can move.",
     "H: Hole, a tile the player should avoid.",
+
     "M: Monster, an obstacle that moves and can be avoided or requires specific actions to bypass.",
+    "F: Monster, that after death leaves a drop - Key",
+    "B: Bomb, Killing all the monsters on scene",
 
     "U: Unstable tile, a tile that disappears after the player steps on it once.",
 

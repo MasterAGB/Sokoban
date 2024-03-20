@@ -3,14 +3,14 @@
     "name": "Whispering Woods",
     "style": "forest",
     "map_structure": [
-        "....C....",
-        ".........",
-        ".........",
-        "HHKHHHHHH",
-        ".........",
-        ".........",
-        ".........",
-        "......S..",
-        "........."
+        "HHHHHHCHH",
+        "H.MMH...H",
+        "HMKFU...H",
+        "HMM.H...H",
+        "HHUHHHUHH",
+        "H...H...H",
+        "H.B.U...H",
+        "H...H..SH",
+        "HHHHHHHHH"
     ]
 }

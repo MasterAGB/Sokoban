@@ -23,6 +23,10 @@ class SolsticeGame:
         self.enableRendering = True
 
         self.level_size = len(self.map_layout) * len(self.map_layout[0])
+        self.level_channels = 5
+        self.level_height = len(self.map_layout)
+        self.level_width = len(self.map_layout[0])
+
         self.action_size = 4  # Assuming Left, Down, Right, Up
 
         pygame.init()
@@ -145,9 +149,14 @@ class SolsticeGame:
             self.is_dizzy = False
             self.replaceThisCell(row, col, ".")
         elif cell == 'K':
-            #reward = 0.5
+            #reward = 0.4
             self.replaceThisCell(row, col, ".")
             self.replaceAllCells("C", "G")
+        elif cell == 'B':
+            #reward = 0.4
+            self.replaceThisCell(row, col, ".")
+            self.replaceAllCells("M", ".")
+            self.replaceAllCells("F", "K")
 
         if (self.step_count > 20000):
             is_truncated = True;
@@ -155,6 +164,24 @@ class SolsticeGame:
         self.render();
 
         return self.state, reward, is_terminated, is_truncated, info
+
+    def generate_multi_channel_state(self):
+        """Generates a multi-channel state representation of the game."""
+        # Define tile types for indexing
+        tile_types = {'F': 0, 'O': 1, 'G': 2, 'K': 3, 'P': 4}
+        num_channels = len(tile_types)  # Number of tile types
+
+        # Initialize an empty state tensor: (num_channels, map_height, map_width)
+        state_tensor = torch.zeros((num_channels, len(self.map_layout), len(self.map_layout[0])))
+
+        # Iterate over the map to fill the state tensor
+        for y, row in enumerate(self.map_layout):
+            for x, cell in enumerate(row):
+                if cell in tile_types:
+                    # Set the corresponding position in the tensor to 1
+                    state_tensor[tile_types[cell], y, x] = 1
+
+        return state_tensor
 
     def replaceThisCell(self, row, col, new_type):
         """
@@ -210,6 +237,12 @@ class SolsticeGame:
     def reset(self):
         self.level_index = self.level_index
         self.map_layout = self.load_map_layout(self.level_index)
+
+        self.level_size = len(self.map_layout) * len(self.map_layout[0])
+        self.level_channels = 5
+        self.level_height = len(self.map_layout)
+        self.level_width = len(self.map_layout[0])
+
         self.state = self.GetDefaultPlayerPosition()
         self.done = False
         self.step_count = 0
@@ -256,9 +289,11 @@ class SolsticeGame:
             'C': load_image_scaled(self.skin, 'goalClosed', scale_factor),
             'K': load_image_scaled(self.skin, 'key', scale_factor),
             'M': load_image_scaled(self.skin, 'mob', scale_factor),
+            'F': load_image_scaled(self.skin, 'mob', scale_factor),
             'U': load_image_scaled(self.skin, 'unstable', scale_factor),
             'D': load_image_scaled(self.skin, 'dizzy', scale_factor),
             'P': load_image_scaled(self.skin, 'potion', scale_factor),
+            'B': load_image_scaled(self.skin, 'potion', scale_factor),
             'WTL': load_image_scaled(self.skin, 'wall', scale_factor),  # Wall Top Left
             'WTR': load_image_scaled(self.skin, 'wall', scale_factor),  # Wall Top Right
         }
