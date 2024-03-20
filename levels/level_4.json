@@ -1,11 +1,15 @@
 {
-    "index": 4,
-    "name": "Snowy Obstacle",
-    "style": "portal",
+    "name": "Whispering Woods",
+    "style": "forest",
     "map_structure": [
-        "S...",
-        ".H..",
-        ".H.H",
-        "...G"
+        "HHHHHHCHH",
+        "H.MMH...H",
+        "HMKFU...H",
+        "HMM.H...H",
+        "HHUHHHUHH",
+        "H...H...H",
+        "H.B.U...H",
+        "H...H..SH",
+        "HHHHHHHHH"
     ]
 }
