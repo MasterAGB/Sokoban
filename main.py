@@ -12,14 +12,19 @@ from SolsticeGame import SolsticeGame
 
 
 class DQN(nn.Module):
-    def __init__(self, in_states, h1_nodes, out_actions):
+    def __init__(self, in_channels, map_height, map_width, h1_nodes, out_actions):
         super().__init__()
 
+        # Calculate the flattened input size
+        self.flattened_size = in_channels * map_height * map_width
+
         # Define network layers
-        self.fc1 = nn.Linear(in_states, h1_nodes)  # first fully connected layer
+        self.fc1 = nn.Linear(self.flattened_size, h1_nodes)  # first fully connected layer
         self.out = nn.Linear(h1_nodes, out_actions)  # ouptut layer w
 
     def forward(self, x):
+        # Flatten the input tensor
+        x = x.view(-1, self.flattened_size)
         x = F.relu(self.fc1(x))  # Apply rectified linear unit (ReLU) activation
         x = self.out(x)  # Calculate output
         return x
@@ -63,8 +68,8 @@ class SolsticeDQL:
         memory = ReplayMemory(int(max(self.replay_memory_size,episodes))) #Size is 1000
 
         # Create policy and target network.
-        policy_dqn = DQN(in_states=game.level_size, h1_nodes=game.level_size, out_actions=game.action_size)
-        target_dqn = DQN(in_states=game.level_size, h1_nodes=game.level_size, out_actions=game.action_size)
+        policy_dqn = DQN(in_channels=game.level_channels, map_height=game.level_height, map_width=game.level_width, h1_nodes=game.level_size, out_actions=game.action_size)
+        target_dqn = DQN(in_channels=game.level_channels, map_height=game.level_height, map_width=game.level_width, h1_nodes=game.level_size, out_actions=game.action_size)
 
         # Make the target and policy networks the same (copy weights/biases from one network to the other)
         target_dqn.load_state_dict(policy_dqn.state_dict())
@@ -90,6 +95,8 @@ class SolsticeDQL:
             state = game.reset()[0]  # Initialize to start state
             is_terminated = False  # True when agent dies or reached goal
             is_truncated = False  # True when agent takes more than X actions
+
+            #TTODO: inprogress:state_tensor = game.generate_multi_channel_state()
 
             # Agent navigates map until it dies/reaches goal (terminated), or has taken 200 actions (truncated).
             while (not is_terminated and not is_truncated):
@@ -201,6 +208,7 @@ class SolsticeDQL:
         self.optimizer.step()
 
     '''
+    OBSOLETE - must replace with multy channel stuff
     Converts an state (int) to a tensor representation.
     For example, the Solstice 4x4 map has 4x4=16 states numbered from 0 to 15. 
 
@@ -209,6 +217,7 @@ class SolsticeDQL:
     '''
 
     def state_to_dqn_input(self, state: int, num_states: int) -> torch.Tensor:
+        #TODO:in progress return game.generate_multi_channel_state()
         input_tensor = torch.zeros(num_states)
         input_tensor[state] = 1
         return input_tensor
@@ -216,7 +225,7 @@ class SolsticeDQL:
     # Run the Solstice game with the learned policy
     def test(self, game: SolsticeGame, episodes):
         # Load learned policy
-        policy_dqn = DQN(in_states=game.level_size, h1_nodes=game.level_size, out_actions=game.action_size)
+        policy_dqn = DQN(in_channels=game.level_channels, map_height=game.level_height, map_width=game.level_width, h1_nodes=game.level_size, out_actions=game.action_size)
         policy_dqn.load_state_dict(torch.load("solstice_dql_" + str(game.level_index) + ".pt"))
         policy_dqn.eval()  # switch model to evaluation mode
 

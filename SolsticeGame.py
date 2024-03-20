@@ -23,7 +23,7 @@ class SolsticeGame:
         self.enableRendering = True
 
         self.level_size = len(self.map_layout) * len(self.map_layout[0])
-        self.level_channels = 5
+        self.level_channels = 1
         self.level_height = len(self.map_layout)
         self.level_width = len(self.map_layout[0])
 
@@ -242,7 +242,6 @@ class SolsticeGame:
         self.map_layout = self.load_map_layout(self.level_index)
 
         self.level_size = len(self.map_layout) * len(self.map_layout[0])
-        self.level_channels = 5
         self.level_height = len(self.map_layout)
         self.level_width = len(self.map_layout[0])
 
