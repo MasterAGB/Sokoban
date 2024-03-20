@@ -24,7 +24,7 @@ class DQN(nn.Module):
 
     def forward(self, x):
         # Flatten the input tensor
-        x = x.view(-1, self.flattened_size)
+        #TODO: this will be needed for multiple channels x = x.view(-1, self.flattened_size)
         x = F.relu(self.fc1(x))  # Apply rectified linear unit (ReLU) activation
         x = self.out(x)  # Calculate output
         return x
@@ -96,7 +96,9 @@ class SolsticeDQL:
             is_terminated = False  # True when agent dies or reached goal
             is_truncated = False  # True when agent takes more than X actions
 
-            #TTODO: inprogress:state_tensor = game.generate_multi_channel_state()
+            cumulative_reward = 0
+
+            #TODO: this will be needed for multiple channels -state_tensor = game.generate_multi_channel_state()
 
             # Agent navigates map until it dies/reaches goal (terminated), or has taken 200 actions (truncated).
             while (not is_terminated and not is_truncated):
@@ -112,6 +114,7 @@ class SolsticeDQL:
 
                 # Execute action
                 new_state, reward, is_terminated, is_truncated, _ = game.step(action)
+                cumulative_reward += reward  # Update at each step within the while loop
 
                 # Save experience into memory
                 memory.append((state, action, new_state, reward, is_terminated))
@@ -123,8 +126,8 @@ class SolsticeDQL:
                 step_count += 1
 
             # Keep track of the rewards collected per episode.
-            if reward >= 1:
-                rewards_per_episode[i] = reward
+            if cumulative_reward >= 1:
+                rewards_per_episode[i] = cumulative_reward
 
             # Check if enough experience has been collected and if at least 1 reward has been collected
             if len(memory) > self.mini_batch_size and np.sum(rewards_per_episode) > 0:
@@ -217,7 +220,7 @@ class SolsticeDQL:
     '''
 
     def state_to_dqn_input(self, state: int, num_states: int) -> torch.Tensor:
-        #TODO:in progress return game.generate_multi_channel_state()
+        #TODO: this will be needed for multiple channels - return game.generate_multi_channel_state()
         input_tensor = torch.zeros(num_states)
         input_tensor[state] = 1
         return input_tensor
@@ -252,6 +255,9 @@ class SolsticeDQL:
         game.SetTitle("Play the game")
         game.reset()
 
+        disable_display_for_training = True
+        training_episodes = 1000  # Default value
+
         # Correctly decode the env.desc to get the map layout
         map_layout = game.map_layout
 
@@ -263,10 +269,13 @@ class SolsticeDQL:
             pygame.K_r: 'reset',
             pygame.K_s: 'skin',
             pygame.K_t: 'train',
-            pygame.K_h: 'hardcoretrain',
             pygame.K_e: 'test',
             pygame.K_n: 'next',
             pygame.K_p: 'prev',
+            pygame.K_PLUS: 'plus',
+            pygame.K_EQUALS: 'plus',
+            pygame.K_MINUS: 'minus',
+            pygame.K_h: 'toggle_display',
         }
 
         state, info = game.reset()
@@ -297,16 +306,21 @@ class SolsticeDQL:
                             game.PrevLevel();
                             game.render()
                             print(f"Skin changed to {game.skin}.")
+                        elif action_mapping[event.key] == 'toggle_display':
+                            disable_display_for_training = not disable_display_for_training;
+                            print(f"disable_display_for_training changed to {disable_display_for_training}.")
                         elif action_mapping[event.key] == 'train':
-                            game.DisableDisplay()
-                            solsticeDQL.train(game, 1000)
+                            if(disable_display_for_training):
+                                game.DisableDisplay()
+                            solsticeDQL.train(game, training_episodes)
                             game.EnableDisplay()
                             print(f"Training the game.")
-                        elif action_mapping[event.key] == 'hardcoretrain':
-                            game.DisableDisplay()
-                            solsticeDQL.train(game, 20000)
-                            game.EnableDisplay()
-                            print(f"Training the game hardcore.")
+                        elif action_mapping[event.key] == 'plus':  # Increase episodes
+                            training_episodes += 200
+                            print(f"Training episodes set to {training_episodes}.")
+                        elif action_mapping[event.key] == 'minus':  # Decrease episodes
+                            training_episodes = max(200, training_episodes - 200)  # Avoid going below 2+00
+                            print(f"Training episodes set to {training_episodes}.")
                         elif action_mapping[event.key] == 'test':
                             solsticeDQL.test(game, 10)
                             print(f"Testing the game.")
@@ -332,17 +346,23 @@ class SolsticeDQL:
         # Loop each state and print policy to console
         for s in range(num_states):
             #  Format q values for printing
-            q_values = ''
-            for q in dqn(self.state_to_dqn_input(s, num_states)).tolist():
-                q_values += "{:+.2f}".format(q) + ' '  # Concatenate q values, format to 2 decimals
-            q_values = q_values.rstrip()  # Remove space at the end
+            q_values_formatted = ''
+            dqn_input = self.state_to_dqn_input(s, num_states)
+            q_values_tensor = dqn(dqn_input)
+            q_values_tensor_list = q_values_tensor.tolist()
+
+            for q in q_values_tensor_list:
+                q_values_formatted += "{:+.2f}".format(q) + ' '  # Concatenate q values, format to 2 decimals
+
+            q_values_formatted = q_values_formatted.rstrip()  # Remove space at the end
 
             # Map the best action to L D R U
-            best_action = ['Left', 'Down', 'Right', 'Up'][dqn(self.state_to_dqn_input(s, num_states)).argmax()]
+            argmax = q_values_tensor.argmax()
+            best_action = ['Left', 'Down', 'Right', 'Up'][argmax]
 
             # Print policy in the format of: state, action, q values
             # The printed layout matches the Solstice map.
-            print(f'{s:02},{best_action},[{q_values}]', end=' ')
+            print(f'{s:02},{best_action},[{q_values_formatted}]', end=' ')
             if (s + 1) % 4 == 0:
                 print()  # Print a newline every 4 states
 
