@@ -92,8 +92,6 @@ class SolsticeGame:
     def step(self, action):
         self.step_count = self.step_count + 1;
 
-
-
         if self.is_dizzy:
             # With some probability, choose a random action instead of the intended one
             if random.random() < 0.33:  # Adjust this probability as needed
@@ -124,6 +122,10 @@ class SolsticeGame:
         elif action == 3:  # Up
             row = max(0, row - 1)
 
+        if self.map_layout[row][col] == 'W':
+            row = row_prev
+            col = col_prev
+
         # Update state
         self.state = row * cols + col
 
@@ -150,11 +152,11 @@ class SolsticeGame:
             self.is_dizzy = False
             self.replaceThisCell(row, col, ".")
         elif cell == 'K':
-            #reward = 0.4
+            # reward = 0.4
             self.replaceThisCell(row, col, ".")
             self.replaceAllCells("C", "G")
         elif cell == 'B':
-            #reward = 0.4
+            # reward = 0.4
             self.replaceThisCell(row, col, ".")
             self.replaceAllCells("M", ".")
             self.replaceAllCells("F", "K")
@@ -258,8 +260,8 @@ class SolsticeGame:
         if self.enableRendering == False:
             return;
 
-
         clock = pygame.time.Clock()
+
         def load_image(skin, name):
             """Loads an image from the 'tiles/' directory."""
             return pygame.image.load(f'tiles/{skin}/{name}.png')
@@ -295,6 +297,7 @@ class SolsticeGame:
             'D': load_image_scaled(self.skin, 'dizzy', scale_factor),
             'P': load_image_scaled(self.skin, 'potion', scale_factor),
             'B': load_image_scaled(self.skin, 'bomb', scale_factor),
+            'W': load_image_scaled(self.skin, 'wall', scale_factor),
             'WTL': load_image_scaled(self.skin, 'wall', scale_factor),  # Wall Top Left
             'WTR': load_image_scaled(self.skin, 'wall', scale_factor),  # Wall Top Right
         }
@@ -303,7 +306,6 @@ class SolsticeGame:
         map_layout = self.map_layout
         grid_size_rows = len(self.map_layout)
         grid_size_cols = len(self.map_layout[0])
-
 
         current_row = self.state // grid_size_cols
         current_col = self.state % grid_size_cols
@@ -347,7 +349,6 @@ class SolsticeGame:
             iso_y = (col + row) * (tile_height // 2) + offset_y - this_tile_offset_y
             win.blit(tiles[tile_type], (iso_x, iso_y))
 
-
         # Render tiles in isometric view, including boundary for walls
         for i in range(-1, grid_size_rows):
             for j in range(-1, grid_size_cols):
@@ -375,9 +376,6 @@ class SolsticeGame:
 
             # Define your colors
 
-
-
-
         # Load the frame image and scale it to the window size
         frame_image = pygame.image.load('tiles/frame.png')
         # Draw (blit) the frame image over everything else
@@ -385,7 +383,7 @@ class SolsticeGame:
 
         descr = "Level " + str(self.level_index) + "  " + str(current_col) + "x" + str(current_row) + "\n";
         descr += "Steps " + str(self.step_count) + "\n";
-        if(self.is_dizzy):
+        if (self.is_dizzy):
             descr += "Poisoned!\n";
 
         self.SetDescription(descr);
@@ -440,7 +438,6 @@ class SolsticeGame:
             # Move Y position down for the next line
             y_pos += text_surface.get_height()
 
-
     def RenderScreen(self, descr, avatar):
         global win, win_size
 
@@ -450,7 +447,7 @@ class SolsticeGame:
         win.blit(frame_image, (0, 0))
 
         # Load the frame image and scale it to the window size
-        avatar_image = pygame.image.load('tiles/'+avatar+'.jpg')
+        avatar_image = pygame.image.load('tiles/' + avatar + '.jpg')
         # Define the target rectangle for the avatar
         x, y, x2, y2 = 591, 590, 722, 689
         target_width = x2 - x
@@ -480,9 +477,6 @@ class SolsticeGame:
 
         pygame.display.flip()
 
-
-
-
     def close(self):
         global pygame, win, win_size;
         pygame.quit()
@@ -503,6 +497,7 @@ class SolsticeGame:
             (193, 223, 254),
             (29, 99, 214))
         pass
+
     def SetTitle(self, param):
         print(param)
         pygame.display.set_caption("Solstice: " + param)
