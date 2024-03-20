@@ -442,10 +442,11 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 # Check if CUDA (GPU support) is available and set device accordingly
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
-print(torch.cuda.is_available())  # Should return True if CUDA is properly set up
-#print(torch.cuda.current_device())  # Shows the current CUDA device ID
-#print(torch.cuda.device_count())  # Shows the number of available CUDA devices
-#print(torch.cuda.get_device_name(0))  # Shows the name of the CUDA device, change 0 accordingly if multiple GPUs
+if(torch.cuda.is_available()):
+    print(torch.cuda.is_available())  # Should return True if CUDA is properly set up
+    print(torch.cuda.current_device())  # Shows the current CUDA device ID
+    print(torch.cuda.device_count())  # Shows the number of available CUDA devices
+    print(torch.cuda.get_device_name(0))  # Shows the name of the CUDA device, change 0 accordingly if multiple GPUs
 
 if __name__ == '__main__':
     solsticeDQL = SolsticeDQL()

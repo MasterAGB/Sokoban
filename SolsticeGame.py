@@ -9,10 +9,10 @@ class SolsticeGame:
     channel_indices = {
         #'S': 0,  # Start
         '.': 1,  # Free space
-        #'H': 2,  # Hole
+        'H': 2,  # Hole
         'G': 3,  # Goal
-        #'K': 4,  # Key
-        #'C': 5,  # Closed goal
+        'K': 4,  # Key
+        'C': 5,  # Closed goal
         #'M': 6,  # Monster
         #'F': 7,  # Monster with key drop
         #'U': 8,  # Unstable
@@ -42,7 +42,7 @@ class SolsticeGame:
         self.enableRendering = True
 
         self.level_size = len(self.map_layout) * len(self.map_layout[0])
-        self.level_channels = len(self.channel_indices)+1
+        self.level_channels = len(self.channel_indices)+1 #adding plus one for the player position on map.
         self.level_height = len(self.map_layout)
         self.level_width = len(self.map_layout[0])
 
@@ -189,17 +189,30 @@ class SolsticeGame:
         return self.state, state_tensor, reward, is_terminated, is_truncated, info
 
     def generate_multi_channel_state(self):
-        # Initialize the state tensor with zeros
-        #TODO: fill with zeros!! i need to know my position in the end, lol!!
-        num_channels = len(self.channel_indices)
+        # Normalize the indices to be continuous starting from 0
+        normalized_channel_indices = {key: i for i, key in enumerate(self.channel_indices)}
+
+        # Correctly increase the number of channels by 1 to include the player's position.
+        num_channels = len(normalized_channel_indices) + 1  # This should reflect in state_tensor initialization
+
+        #print(f"Number of channels (including player position): {num_channels}")
+
+        # Initialize the state tensor with zeros, explicitly setting the channel dimension.
         state_tensor = torch.zeros((num_channels, self.level_height, self.level_width))
 
-        # Populate the tensor based on the map layout
+        # Populate the tensor based on the map layout for predefined channel indices.
         for y, row in enumerate(self.map_layout):
             for x, cell in enumerate(row):
-                if cell in self.channel_indices:
-                    channel = self.channel_indices[cell]
+                if cell in normalized_channel_indices:
+                    channel = normalized_channel_indices[cell]
                     state_tensor[channel, y, x] = 1
+
+        # Calculate player's current position.
+        player_row = self.state // self.level_width
+        player_col = self.state % self.level_width
+
+        # IMPORTANT: Verify the last channel is correctly assigned for the player's position.
+        state_tensor[num_channels - 1, player_row, player_col] = 1  # Use num_channels - 1 instead of -1
 
         return state_tensor
 
