@@ -13,17 +13,18 @@ class SolsticeGame:
         'G': 3,  # Goal
         'K': 4,  # Key
         'C': 5,  # Closed goal
-        #'M': 6,  # Monster
-        #'F': 7,  # Monster with key drop
-        #'U': 8,  # Unstable
-        #'D': 9,  # Dizzy
-        #'P': 10,  # Potion
-        #'B': 11,  # Bomb
+        'M': 6,  # Monster
+        'F': 7,  # Monster with key drop
+        'U': 8,  # Unstable
+        'D': 9,  # Dizzy
+        'P': 10,  # Potion
+        'B': 11,  # Bomb
         #'W': 12,  # Wall
     }
 
 
-    def __init__(self, level_index=1, game_skin="default"):
+    def __init__(self, level_index=1, game_skin="default", device = "cpu"):
+        self.device = device
         self.level_name = None
         self.skins = ['default', 'portal', 'bombs', 'forest', 'ice', 'castle']
         self.skin = game_skin
@@ -171,11 +172,11 @@ class SolsticeGame:
             self.is_dizzy = False
             self.replaceThisCell(row, col, ".")
         elif cell == 'K':
-            # reward = 0.4
+            reward = 0.3
             self.replaceThisCell(row, col, ".")
             self.replaceAllCells("C", "G")
         elif cell == 'B':
-            # reward = 0.4
+            reward = 0.3
             self.replaceThisCell(row, col, ".")
             self.replaceAllCells("M", ".")
             self.replaceAllCells("F", "K")
@@ -214,7 +215,7 @@ class SolsticeGame:
         # IMPORTANT: Verify the last channel is correctly assigned for the player's position.
         state_tensor[num_channels - 1, player_row, player_col] = 1  # Use num_channels - 1 instead of -1
 
-        return state_tensor
+        return state_tensor.to(self.device)
 
     def replaceThisCell(self, row, col, new_type):
         """

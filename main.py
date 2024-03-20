@@ -11,6 +11,15 @@ import pygame
 from SolsticeGame import SolsticeGame
 
 
+# Check if CUDA (GPU support) is available and set device accordingly
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+if(torch.cuda.is_available()):
+    print(torch.cuda.is_available())  # Should return True if CUDA is properly set up
+    print(torch.cuda.current_device())  # Shows the current CUDA device ID
+    print(torch.cuda.device_count())  # Shows the number of available CUDA devices
+    print(torch.cuda.get_device_name(0))  # Shows the name of the CUDA device, change 0 accordingly if multiple GPUs
+
 
 
 class DQN(nn.Module):
@@ -65,14 +74,14 @@ class SolsticeDQL:
     # Train the Solstice environment
     def train(self, game: SolsticeGame, episodes):
 
-        game.RenderScreen("Train in progress\n"+str(episodes)+" episodes", "evil")
+        game.RenderScreen("Train in progress\n"+f"Train device {device}\n"+str(episodes)+" episodes", "evil")
 
         epsilon = 1  # 1 = 100% random actions
         memory = ReplayMemory(int(max(self.replay_memory_size,episodes))) #Size is 1000
 
         # Create policy and target network.
-        policy_dqn = DQN(in_channels=game.level_channels, map_height=game.level_height, map_width=game.level_width, h1_nodes=game.level_size, out_actions=game.action_size)
-        target_dqn = DQN(in_channels=game.level_channels, map_height=game.level_height, map_width=game.level_width, h1_nodes=game.level_size, out_actions=game.action_size)
+        policy_dqn = DQN(in_channels=game.level_channels, map_height=game.level_height, map_width=game.level_width, h1_nodes=game.level_size, out_actions=game.action_size).to(device)
+        target_dqn = DQN(in_channels=game.level_channels, map_height=game.level_height, map_width=game.level_width, h1_nodes=game.level_size, out_actions=game.action_size).to(device)
 
         # Make the target and policy networks the same (copy weights/biases from one network to the other)
         target_dqn.load_state_dict(policy_dqn.state_dict())
@@ -276,8 +285,8 @@ class SolsticeDQL:
     # Run the Solstice game with the learned policy
     def test(self, game: SolsticeGame, episodes):
         # Load learned policy
-        policy_dqn = DQN(in_channels=game.level_channels, map_height=game.level_height, map_width=game.level_width, h1_nodes=game.level_size, out_actions=game.action_size)
-        policy_dqn.load_state_dict(torch.load("solstice_dql_" + str(game.level_index) + ".pt"))
+        policy_dqn = DQN(in_channels=game.level_channels, map_height=game.level_height, map_width=game.level_width, h1_nodes=game.level_size, out_actions=game.action_size).to(device)
+        policy_dqn.load_state_dict(torch.load("solstice_dql_" + str(game.level_index) + ".pt", map_location=device))
         policy_dqn.eval()  # switch model to evaluation mode
 
         print('Policy (trained):')
@@ -439,17 +448,8 @@ class SolsticeDQL:
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
-# Check if CUDA (GPU support) is available and set device accordingly
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
-if(torch.cuda.is_available()):
-    print(torch.cuda.is_available())  # Should return True if CUDA is properly set up
-    print(torch.cuda.current_device())  # Shows the current CUDA device ID
-    print(torch.cuda.device_count())  # Shows the number of available CUDA devices
-    print(torch.cuda.get_device_name(0))  # Shows the name of the CUDA device, change 0 accordingly if multiple GPUs
-
 if __name__ == '__main__':
     solsticeDQL = SolsticeDQL()
-    game = SolsticeGame(level_index=1)
+    game = SolsticeGame(level_index=1, device=device)
     solsticeDQL.play(game)
     game.close()
