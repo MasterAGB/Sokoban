@@ -1,28 +1,25 @@
 {
-  "name": "Icy Maze",
+  "name": "Dark forest",
   "style": "forest",
   "map_structure": [
-    ".....G.",
-    ".......",
-    ".......",
-    ".......",
-    "...S...",
-    ".......",
-    "......."
+    "..G.",
+    "....",
+    "....",
+    "S..."
   ],
   "comment": [
-    "Here's a breakdown of the symbols used in the levels and their meanings for your level designer:",
-    "S: Starting point of the level.",
+    "Here's a breakdown of the symbols used in the levels for level designer. Levels can be from 3x3 to 9x9, also in non square forms. most interesting levels are bigger ones.",
+    "S: Starting point for player of the level.",
     ". (Dot): Free space where the player can move.",
-    "H: Hole, a tile the player should avoid.",
-    "M: Monster, an obstacle that moves and can be avoided or requires specific actions to bypass.",
-    "F: Monster, that after death leaves a drop - Key",
-    "B: Bomb, Killing all the monsters on scene",
-    "U: Unstable tile, a tile that disappears after the player steps on it once.",
-    "D: Dizzy tile, temporarily alters player's control or vision.",
-    "P: Potion, restores the player's normal state or provides bonuses.",
-    "K: Key, an item that can be collected for rewards or to unlock paths.",
-    "C: Closed goal point, that must be unlocked by the Key",
-    "G: Goal point of the level, where the player must reach to complete the level."
+    "H: Hole on the floor, a tile the player should avoid.",
+    "M: Monster, randomly moves only on Free space tiles, kills player, if touched. Usually not scary if alone - low chances to touch.",
+    "F: Monster, randomly moves only on Free space tiles, kills player, if touched, that after death (can die only if bomb is taken) leaves a drop - Key for a closed goal gate",
+    "B: Bomb, if taken is Killing all the monsters on scene. Good for killing F-mosnter, that can leave key for opening the gate, or for killing multiple M monsters.",
+    "U: Unstable tile, a tile that disappears and transforms to hole after the player steps on it once.",
+    "D: Mushroom tile, that if collected, temporarily alters player's control, until player drinks a potion. Level must have a potion, if there is a mushroom tile.",
+    "P: Potion, restores the player's normal state in case, if mushroom was accidentally eaten",
+    "K: Key, an item that can be collected to unlock paths closed gates",
+    "C: Closed goal gate - is transofmed to G (Goal gate) when unlocked. that must be unlocked by the Key by getting the key - the only way to exit level. Better placed on the top line somewhere. No sense of using it, if there is a opened gate, or there is no key. Maybe can be used as design to show, that there are alternative exists, that are closed now.",
+    "G: Goal - Gate of the level, where the player must reach to complete the level. Better placed on the top line somewhere. Not much sense to have it, if there is a closed gate and key on level."
   ]
 }

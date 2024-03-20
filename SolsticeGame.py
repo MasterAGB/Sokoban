@@ -6,46 +6,25 @@ import torch
 
 class SolsticeGame:
     # Define each tile type's index in the channel dimension
-    channel_indices = {
-        #'S': 0,  # Start
-        '.': 1,  # Free space
-        'H': 2,  # Hole
-        'G': 3,  # Goal
-        'K': 4,  # Key
-        'C': 5,  # Closed goal
-        'M': 6,  # Monster
-        'F': 7,  # Monster with key drop
-        'U': 8,  # Unstable
-        'D': 9,  # Dizzy
-        'P': 10,  # Potion
-        'B': 11,  # Bomb
-        #'W': 12,  # Wall
-    }
-
+    used_channel_indices = {}
 
     def __init__(self, level_index=1, game_skin="default", device = "cpu"):
+        global win, win_size;
+
         self.device = device
         self.level_name = None
         self.skins = ['default', 'portal', 'bombs', 'forest', 'ice', 'castle']
+
         self.skin = game_skin
         self.last_action = None
-        global win, win_size;
-        self.level_index = level_index
-        self.map_layout = self.load_map_layout(self.level_index)
+        self.SetupLevel(level_index)
 
-        self.step_count = 0
-        self.is_dizzy = False
-        self.state = 0
-        self.done = False
+
         # Define action mapping: 0=Left, 1=Down, 2=Right, 3=Up
         # self.action_space = np.arange(4)
         # self.observation_space = np.arange(len(self.map_layout) * len(self.map_layout[0]))
         self.enableRendering = True
 
-        self.level_size = len(self.map_layout) * len(self.map_layout[0])
-        self.level_channels = len(self.channel_indices)+1 #adding plus one for the player position on map.
-        self.level_height = len(self.map_layout)
-        self.level_width = len(self.map_layout[0])
 
         self.action_size = 4  # Assuming Left, Down, Right, Up
 
@@ -191,7 +170,7 @@ class SolsticeGame:
 
     def generate_multi_channel_state(self):
         # Normalize the indices to be continuous starting from 0
-        normalized_channel_indices = {key: i for i, key in enumerate(self.channel_indices)}
+        normalized_channel_indices = self.used_channel_indices
 
         # Correctly increase the number of channels by 1 to include the player's position.
         num_channels = len(normalized_channel_indices) + 1  # This should reflect in state_tensor initialization
@@ -269,18 +248,7 @@ class SolsticeGame:
         return 0
 
     def reset(self):
-        self.level_index = self.level_index
-        self.map_layout = self.load_map_layout(self.level_index)
-
-        self.level_size = len(self.map_layout) * len(self.map_layout[0])
-        self.level_height = len(self.map_layout)
-        self.level_width = len(self.map_layout[0])
-
-        self.state = self.GetDefaultPlayerPosition()
-        self.done = False
-        self.step_count = 0
-        self.is_dizzy = False
-
+        self.SetupLevel(self.level_index)
         self.render();
 
         return self.state, {}
@@ -561,6 +529,67 @@ class SolsticeGame:
     def SetFooter(self):
 
         self.draw_text_with_gradient(
-            "=Train =Evaluate =Reset =Next =Prev =Skin", (8, 714),
+            "=Train e=Xpert =Eval =Reset =Next =Prev =Skin", (8, 714),
             (231, 255, 165),
             (0, 150, 0))
+
+    def SetupLevel(self, level_index):
+        self.level_index = level_index;
+        self.map_layout = self.load_map_layout(self.level_index)
+        self.level_size = len(self.map_layout) * len(self.map_layout[0])
+        self.used_channel_indices = self.GetUsedChannelIndexes()
+        self.level_channels_count = len(self.used_channel_indices) + 1  # adding plus one for the player position on map.
+        self.level_height = len(self.map_layout)
+        self.level_width = len(self.map_layout[0])
+
+        self.state = self.GetDefaultPlayerPosition()
+        self.done = False
+        self.step_count = 0
+        self.is_dizzy = False
+
+    def GetUsedChannelIndexes(self):
+        valuable_channel_indices = {
+            # 'S': 0,  # Start
+            #'.': 1,  # Free space
+            'H': 2,  # Hole
+            'G': 3,  # Goal
+            'K': 4,  # Key
+            'C': 5,  # Closed goal
+            #'M': 6,  # Monster
+            'F': 7,  # Monster with key drop
+            'U': 8,  # Unstable
+            #'D': 9,  # Dizzy
+            #'P': 10,  # Potion
+            'B': 11,  # Bomb
+            'W': 12,  # Wall
+        }
+
+        # Initialize a set to hold the unique tiles found in the map layout
+        used_tiles = set()
+
+        # Iterate through each row and column in the map layout
+        for row in self.map_layout:
+            for cell in row:
+                if cell in valuable_channel_indices:
+                    # If the cell/tile is in our list of valuable tiles, add it to the set
+                    used_tiles.add(cell)
+
+        # Ensure certain conditions are met
+        if 'B' in used_tiles:
+            used_tiles.add('K')  # Add 'K' if 'B' is present
+        if 'C' in used_tiles:
+            used_tiles.add('G')  # Add 'G' if 'C' is present
+        if 'U' in used_tiles:
+            used_tiles.add('H')  # Add 'H' if 'U' is present
+
+        # Ensure free space ('.') is always added
+        #used_tiles.add('.')
+
+        # Filter the valuable_channel_indices to include only those used in the map layout
+        used_channel_indices = {key: valuable_channel_indices[key] for key in used_tiles}
+
+        # Normalize the channel indices to be continuous starting from 0
+        normalized_channel_indices = {key: i for i, key in enumerate(used_channel_indices)}
+
+        return normalized_channel_indices
+

@@ -1,11 +1,13 @@
 {
-    "name": "Ice Capade",
-    "style": "bombs",
+    "name": "The Enchanted Forest",
+    "style": "forest",
     "map_structure": [
-        "S...",
-        "....",
-        ".H.H",
-        "...H",
-        "H..G"
+        ".U.C.U.",
+        ".U.M.U.",
+        ".U.M.U.",
+        ".U.K.U.",
+        ".U.M.U.",
+        ".U.M.U.",
+        "S......"
     ]
 }

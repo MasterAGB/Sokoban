@@ -1,15 +1,15 @@
 {
-    "name": "Whispering Woods",
-    "style": "forest",
-    "map_structure": [
-        "HHHHHHCHH",
-        "H.MMH...H",
-        "HMKFU...H",
-        "HMM.H...H",
-        "HHUHHHUHH",
-        "H...H...H",
-        "H.B.U...H",
-        "H...H..SH",
-        "HHHHHHHHH"
-    ]
+  "name": "The Whispering Woods",
+  "style": "forest",
+  "map_structure": [
+    ".....C...",
+    ".U...M.U.",
+    "..U....U.",
+    "U...B...U",
+    "...D.S..P",
+    "U.......U",
+    "..U.F.U..",
+    ".U.....U.",
+    "....U...."
+  ]
 }

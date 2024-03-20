@@ -369,6 +369,21 @@ def simulate_step(action):
 def ai_train(model, episodes, gamma=0.99, epsilon_start=1.0, epsilon_end=0.01, epsilon_decay=0.995):
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     epsilon = epsilon_start
+
+    # Rendering the game state
+    screen.fill(WHITE)
+    pygame.display.flip()
+
+    # Wait for user keypress
+    waiting_for_keypress = True
+    while waiting_for_keypress:
+        for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN:  # A key has been pressed
+                waiting_for_keypress = False
+            elif event.type == pygame.QUIT:  # The window's close button is clicked
+                pygame.quit()
+                sys.exit()
+
     for episode in range(episodes):
         epsilon = max(epsilon_end, epsilon_decay * epsilon)  # Apply epsilon decay
         current_level = 0
@@ -483,7 +498,7 @@ def user_select_action(state, model, epsilon):
 
 
 model = SokobanNet()  # Create a model instance with the same architecture
-model.load_state_dict(torch.load('sokoban_model_state_dict_2.pth'))
+#model.load_state_dict(torch.load('sokoban_model_state_dict_2.pth'))
 model.eval()  # Set the model to evaluation mode
 
 print(model)
