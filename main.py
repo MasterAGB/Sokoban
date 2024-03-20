@@ -11,6 +11,8 @@ import pygame
 from SolsticeGame import SolsticeGame
 
 
+
+
 class DQN(nn.Module):
     def __init__(self, in_channels, map_height, map_width, h1_nodes, out_actions):
         super().__init__()
@@ -23,8 +25,9 @@ class DQN(nn.Module):
         self.out = nn.Linear(h1_nodes, out_actions)  # ouptut layer w
 
     def forward(self, x):
-        # Flatten the input tensor
-        #TODO: this will be needed for multiple channels x = x.view(-1, self.flattened_size)
+        # Ensure x is properly flattened
+        #TODO: only if multi
+        x = x.view(-1, self.flattened_size)
         x = F.relu(self.fc1(x))  # Apply rectified linear unit (ReLU) activation
         x = self.out(x)  # Calculate output
         return x
@@ -75,7 +78,8 @@ class SolsticeDQL:
         target_dqn.load_state_dict(policy_dqn.state_dict())
 
         print('Policy network - random, before training:')
-        self.print_dqn(policy_dqn)
+        interesting_states = game.generate_multi_channel_state()
+        self.print_dqn(policy_dqn, interesting_states)
 
         # Policy network optimizer. "Adam" optimizer can be swapped to something else.
         self.optimizer = torch.optim.Adam(policy_dqn.parameters(), lr=self.learning_rate_a)
@@ -93,12 +97,12 @@ class SolsticeDQL:
             game.SetTitle("Train episode {}/{}".format(i + 1, episodes))
 
             state = game.reset()[0]  # Initialize to start state
+            state_tensor = game.generate_multi_channel_state()  # Get the current state in tensor form
+
             is_terminated = False  # True when agent dies or reached goal
             is_truncated = False  # True when agent takes more than X actions
 
             cumulative_reward = 0
-
-            #TODO: this will be needed for multiple channels -state_tensor = game.generate_multi_channel_state()
 
             # Agent navigates map until it dies/reaches goal (terminated), or has taken 200 actions (truncated).
             while (not is_terminated and not is_truncated):
@@ -110,17 +114,20 @@ class SolsticeDQL:
                 else:
                     # select best action
                     with torch.no_grad():
-                        action = policy_dqn(self.state_to_dqn_input(state, game.level_size)).argmax().item()
+                        dqn_input = self.state_to_dqn_input(state, state_tensor, game.level_size)
+                        action_values = policy_dqn(dqn_input)
+                        action = action_values.argmax().item()
 
                 # Execute action
-                new_state, reward, is_terminated, is_truncated, _ = game.step(action)
+                new_state, new_state_tensor, reward, is_terminated, is_truncated, _ = game.step(action)
                 cumulative_reward += reward  # Update at each step within the while loop
 
                 # Save experience into memory
-                memory.append((state, action, new_state, reward, is_terminated))
+                memory.append((state, state_tensor, action, new_state, new_state_tensor, reward, is_terminated))
 
                 # Move to the next state
                 state = new_state
+                state_tensor = new_state_tensor
 
                 # Increment step counter
                 step_count += 1
@@ -169,8 +176,44 @@ class SolsticeDQL:
 
         plt.show()
 
-    # Optimize policy network
     def optimize(self, mini_batch, policy_dqn, target_dqn):
+        # Extract experiences
+        state_tensors = torch.stack([s[1] for s in mini_batch])
+        actions = torch.tensor([s[2] for s in mini_batch], dtype=torch.int64).view(-1, 1)
+        rewards = torch.tensor([s[5] for s in mini_batch], dtype=torch.float32)
+        non_final_next_states = torch.stack([s[4] for s in mini_batch if not s[6]])
+        non_final_mask = torch.tensor([not s[6] for s in mini_batch], dtype=torch.bool)
+
+        # Determine the device dynamically
+        device = next(policy_dqn.parameters()).device
+        state_tensors = state_tensors.to(device)
+        actions = actions.to(device)
+        rewards = rewards.to(device)
+        non_final_next_states = non_final_next_states.to(device)
+        non_final_mask = non_final_mask.to(device)
+
+        # Compute Q(s_t, a) - the model computes Q(s_t), then we select the columns of actions taken
+        current_q_values = policy_dqn(state_tensors).gather(1, actions).squeeze()
+
+        # Compute V(s_{t+1}) for all next states.
+        next_state_values = torch.zeros(len(mini_batch), device=device)
+        next_state_values[non_final_mask] = target_dqn(non_final_next_states).max(1)[0].detach()
+
+        # Compute the expected Q values
+        expected_q_values = (next_state_values * self.discount_factor_g) + rewards
+
+        # Compute Huber loss
+        loss = F.smooth_l1_loss(current_q_values, expected_q_values)
+
+        # Optimize the model
+        self.optimizer.zero_grad()
+        loss.backward()
+        for param in policy_dqn.parameters():
+            param.grad.data.clamp_(-1, 1)
+        self.optimizer.step()
+
+    # Optimize policy network
+    def optimizeOld(self, mini_batch, policy_dqn, target_dqn):
 
         # Get number of input nodes
         num_states = policy_dqn.fc1.in_features
@@ -219,8 +262,13 @@ class SolsticeDQL:
     Return: tensor([0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
     '''
 
-    def state_to_dqn_input(self, state: int, num_states: int) -> torch.Tensor:
-        #TODO: this will be needed for multiple channels - return game.generate_multi_channel_state()
+    def state_to_dqn_input(self, state: int, state_tensor, num_states: int) -> torch.Tensor:
+
+        # TODO: this is needed for multiple channels
+        return state_tensor.unsqueeze(0);
+
+        #this was single channel stuff
+
         input_tensor = torch.zeros(num_states)
         input_tensor[state] = 1
         return input_tensor
@@ -233,22 +281,27 @@ class SolsticeDQL:
         policy_dqn.eval()  # switch model to evaluation mode
 
         print('Policy (trained):')
-        self.print_dqn(policy_dqn)
+        interesting_states = game.generate_multi_channel_state()
+        self.print_dqn(policy_dqn, interesting_states)
 
         for i in range(episodes):
             game.SetTitle("Test episode {}/{}".format(i + 1, episodes))
             state = game.reset()[0]  # Initialize to state 0
+            state_tensor = game.generate_multi_channel_state()
             is_terminated = False  # True when agent falls in hole or reached goal
             is_truncated = False  # True when agent takes more than 200 actions
 
             # Agent navigates map until it dies (terminated), reaches goal (terminated), or has taken 200 actions (truncated).
             while (not is_terminated and not is_truncated):
+
                 # Select best action
                 with torch.no_grad():
-                    action = policy_dqn(self.state_to_dqn_input(state, game.level_size)).argmax().item()
+                    dqn_input = self.state_to_dqn_input(state, state_tensor, game.level_size)
+                    action_values = policy_dqn(dqn_input)
+                    action = action_values.argmax().item()
 
                 # Execute action
-                state, reward, is_terminated, is_truncated, _ = game.step(action)
+                state, state_tensor, reward, is_terminated, is_truncated, _ = game.step(action)
 
     def play(self, game: SolsticeGame):
 
@@ -316,18 +369,19 @@ class SolsticeDQL:
                             game.EnableDisplay()
                             print(f"Training the game.")
                         elif action_mapping[event.key] == 'plus':  # Increase episodes
-                            training_episodes += 200
+                            training_episodes += 100
                             print(f"Training episodes set to {training_episodes}.")
                         elif action_mapping[event.key] == 'minus':  # Decrease episodes
-                            training_episodes = max(200, training_episodes - 200)  # Avoid going below 2+00
+                            training_episodes = max(100, training_episodes - 100)  # Avoid going below 2+00
                             print(f"Training episodes set to {training_episodes}.")
                         elif action_mapping[event.key] == 'test':
                             solsticeDQL.test(game, 10)
                             print(f"Testing the game.")
                         else:
                             action = action_mapping[event.key]
-                            new_state, reward, is_terminated, is_truncated, _ = game.step(action)
+                            new_state, new_state_tensor, reward, is_terminated, is_truncated, _ = game.step(action)
                             state = new_state
+                            state_tensor = new_state_tensor
                             print(
                                 f"Action: {['Left', 'Down', 'Right', 'Up'][action]}, New State: {new_state}, Reward: {reward}")
                             if is_terminated:
@@ -338,8 +392,24 @@ class SolsticeDQL:
                                     state, info = game.Lost();
                                     is_terminated = False
 
+    def print_dqn(self, dqn, state_tensor):
+        """
+        Prints the DQN output for a list of given state tensors.
+
+        Parameters:
+        - dqn: The DQN model to use for generating action values.
+        - state_tensors: A list of state tensors to evaluate.
+        """
+        with torch.no_grad():
+            action_values = dqn(state_tensor.unsqueeze(0))  # Ensure it has a batch dimension
+            q_values = action_values.squeeze(0).tolist()
+            best_action_index = action_values.argmax(dim=1).item()
+            best_action = ['Left', 'Down', 'Right', 'Up'][best_action_index]
+            q_values_formatted = ' '.join(f"{q:+.2f}" for q in q_values)
+            print(f"Best action: {best_action}, Q-values: [{q_values_formatted}]")
+
     # Print DQN: state, best action, q values
-    def print_dqn(self, dqn):
+    def print_dqn_old(self, dqn):
         # Get number of input nodes
         num_states = dqn.fc1.in_features
 
@@ -367,6 +437,15 @@ class SolsticeDQL:
                 print()  # Print a newline every 4 states
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
+
+# Check if CUDA (GPU support) is available and set device accordingly
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+print(torch.cuda.is_available())  # Should return True if CUDA is properly set up
+#print(torch.cuda.current_device())  # Shows the current CUDA device ID
+#print(torch.cuda.device_count())  # Shows the number of available CUDA devices
+#print(torch.cuda.get_device_name(0))  # Shows the name of the CUDA device, change 0 accordingly if multiple GPUs
 
 if __name__ == '__main__':
     solsticeDQL = SolsticeDQL()

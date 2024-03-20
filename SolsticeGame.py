@@ -1,9 +1,28 @@
 import json
 import random
 import pygame
+import torch
 
 
 class SolsticeGame:
+    # Define each tile type's index in the channel dimension
+    channel_indices = {
+        #'S': 0,  # Start
+        '.': 1,  # Free space
+        #'H': 2,  # Hole
+        'G': 3,  # Goal
+        #'K': 4,  # Key
+        #'C': 5,  # Closed goal
+        #'M': 6,  # Monster
+        #'F': 7,  # Monster with key drop
+        #'U': 8,  # Unstable
+        #'D': 9,  # Dizzy
+        #'P': 10,  # Potion
+        #'B': 11,  # Bomb
+        #'W': 12,  # Wall
+    }
+
+
     def __init__(self, level_index=1, game_skin="default"):
         self.level_name = None
         self.skins = ['default', 'portal', 'bombs', 'forest', 'ice', 'castle']
@@ -23,7 +42,7 @@ class SolsticeGame:
         self.enableRendering = True
 
         self.level_size = len(self.map_layout) * len(self.map_layout[0])
-        self.level_channels = 1
+        self.level_channels = len(self.channel_indices)+1
         self.level_height = len(self.map_layout)
         self.level_width = len(self.map_layout[0])
 
@@ -165,24 +184,22 @@ class SolsticeGame:
             is_truncated = True;
 
         self.render();
+        state_tensor = self.generate_multi_channel_state();
 
-        return self.state, reward, is_terminated, is_truncated, info
+        return self.state, state_tensor, reward, is_terminated, is_truncated, info
 
     def generate_multi_channel_state(self):
-        """Generates a multi-channel state representation of the game."""
-        # Define tile types for indexing
-        tile_types = {'F': 0, 'O': 1, 'G': 2, 'K': 3, 'P': 4}
-        num_channels = len(tile_types)  # Number of tile types
+        # Initialize the state tensor with zeros
+        #TODO: fill with zeros!! i need to know my position in the end, lol!!
+        num_channels = len(self.channel_indices)
+        state_tensor = torch.zeros((num_channels, self.level_height, self.level_width))
 
-        # Initialize an empty state tensor: (num_channels, map_height, map_width)
-        state_tensor = torch.zeros((num_channels, len(self.map_layout), len(self.map_layout[0])))
-
-        # Iterate over the map to fill the state tensor
+        # Populate the tensor based on the map layout
         for y, row in enumerate(self.map_layout):
             for x, cell in enumerate(row):
-                if cell in tile_types:
-                    # Set the corresponding position in the tensor to 1
-                    state_tensor[tile_types[cell], y, x] = 1
+                if cell in self.channel_indices:
+                    channel = self.channel_indices[cell]
+                    state_tensor[channel, y, x] = 1
 
         return state_tensor
 
